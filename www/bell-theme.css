@@ -1,0 +1,288 @@
+/*
+  Bell's look. This file only changes appearance: colors, shapes, spacing and
+  type. It is loaded after the app's built-in styles, so deleting it (and its
+  <link> line in index.html) brings back the original look.
+
+  Concept: an evening-indigo header band with a brass "bell" accent, soft
+  floating cards and chat bubbles below.
+*/
+
+:root {
+  --bg: #f2f3fa;
+  --surface: #ffffff;
+  --fg: #1a1c33;
+  --muted: #5f6585;
+  --line: #e1e3f0;
+  --accent: #4338ca;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8e7fb;
+  --me: #4338ca;
+  --me-fg: #ffffff;
+  --ok: #17845a;
+  --warn: #b4531a;
+  --bar: #e0a93b;
+  --band: #23245a;
+  --band-2: #3b2f9e;
+  --band-fg: #ffffff;
+  --band-muted: rgba(255, 255, 255, 0.72);
+  --brass: #e9b949;
+  --brass-deep: #b9852a;
+  --shadow: 0 1px 2px rgba(26, 28, 51, 0.06), 0 6px 18px rgba(26, 28, 51, 0.07);
+  --shadow-lift: 0 2px 4px rgba(26, 28, 51, 0.08), 0 12px 28px rgba(26, 28, 51, 0.12);
+  --radius: 18px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1022;
+    --surface: #1a1b33;
+    --fg: #ecedf8;
+    --muted: #a2a6c4;
+    --line: #2b2d4d;
+    --accent: #8f8cff;
+    --accent-fg: #0f1022;
+    --accent-soft: #272965;
+    --me: #5146e0;
+    --me-fg: #ffffff;
+    --ok: #4fc792;
+    --warn: #f0a46c;
+    --bar: #e9b949;
+    --band: #15163a;
+    --band-2: #2a2475;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.35);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1022;
+  --surface: #1a1b33;
+  --fg: #ecedf8;
+  --muted: #a2a6c4;
+  --line: #2b2d4d;
+  --accent: #8f8cff;
+  --accent-fg: #0f1022;
+  --accent-soft: #272965;
+  --me: #5146e0;
+  --me-fg: #ffffff;
+  --ok: #4fc792;
+  --warn: #f0a46c;
+  --bar: #e9b949;
+  --band: #15163a;
+  --band-2: #2a2475;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- header band ---------- */
+header,
+nav {
+  /* paint the band edge to edge, past the side gutters */
+  box-shadow: 0 0 0 100vmax var(--band);
+  clip-path: inset(0 -100vmax);
+  background: var(--band);
+}
+header {
+  padding-block: 18px 14px;
+  color: var(--band-fg);
+}
+nav {
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 16px;
+  background: var(--band);
+  gap: 6px;
+}
+h1 {
+  color: var(--band-fg);
+  font-size: 1.75rem;
+  letter-spacing: -0.015em;
+}
+.count {
+  color: var(--band-muted);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+/* the avatar becomes a small brass bell face */
+.avatar {
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle at 35% 30%, #f7d98a 0%, var(--brass) 45%, var(--brass-deep) 100%);
+  color: #2a1d05;
+  box-shadow: 0 0 0 3px rgba(233, 185, 73, 0.25), 0 4px 14px rgba(233, 185, 73, 0.35);
+  font-size: 1.2rem;
+}
+
+/* tabs: a soft pill switcher inside the band */
+nav button {
+  color: var(--band-muted);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 10px 4px;
+  transition: background 0.2s, color 0.2s;
+}
+nav button[aria-selected="true"] {
+  background: var(--band-fg);
+  color: var(--band);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+main {
+  padding-block: 14px 10px;
+}
+
+/* ---------- chat ---------- */
+.scroll {
+  gap: 12px;
+  padding-inline: 2px;
+}
+.msg {
+  border-radius: 20px;
+  padding: 11px 15px;
+  line-height: 1.55;
+  box-shadow: var(--shadow);
+}
+.msg.bot {
+  border: 0;
+  border-bottom-left-radius: 6px;
+}
+.msg.me {
+  background: linear-gradient(140deg, var(--me) 0%, var(--band-2) 100%);
+  border-bottom-right-radius: 6px;
+}
+.msg .src {
+  font-size: 0.76rem;
+}
+.msg .tools .btn.small {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--fg);
+}
+
+/* ---------- message box ---------- */
+#ask-form {
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px;
+  box-shadow: var(--shadow-lift);
+  align-items: center;
+  gap: 6px;
+}
+#ask-form textarea {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+#ask-form textarea:focus {
+  outline: none;
+}
+#ask-form:focus-within {
+  box-shadow: var(--shadow-lift), 0 0 0 2px var(--accent);
+}
+#ask-form .btn {
+  border-radius: 999px;
+  min-height: 44px;
+  padding-inline: 16px;
+}
+#ask-form .btn.ghost {
+  background: var(--accent-soft);
+  border: 0;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  border-radius: 14px;
+  min-height: 44px;
+  transition: transform 0.12s, box-shadow 0.2s, background 0.2s;
+}
+.btn:not(.ghost) {
+  color: #ffffff;
+  background: linear-gradient(140deg, var(--me) 0%, var(--band-2) 100%);
+  box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn.small {
+  min-height: 32px;
+  border-radius: 999px;
+}
+.btn[aria-pressed="true"] {
+  background: var(--warn);
+  box-shadow: 0 0 0 4px rgba(180, 83, 26, 0.2);
+}
+
+/* ---------- cards, teach and memory ---------- */
+.drop,
+.card,
+details.install {
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.drop {
+  padding: 20px 18px;
+}
+.drop.over {
+  box-shadow: var(--shadow), 0 0 0 2px var(--accent);
+}
+#brain-card {
+  background: linear-gradient(160deg, var(--surface) 0%, var(--accent-soft) 100%);
+}
+.drop h2 {
+  font-size: 1.2rem;
+}
+.kind {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 0.76rem;
+  padding: 3px 10px;
+}
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.progress > div {
+  background: linear-gradient(90deg, var(--brass-deep), var(--bar));
+  border-radius: 999px;
+}
+input[type="text"],
+input[type="search"],
+textarea {
+  border-radius: 14px;
+  border-color: var(--line);
+  box-shadow: inset 0 1px 2px rgba(26, 28, 51, 0.04);
+}
+#search {
+  border-radius: 999px;
+  padding-inline: 18px;
+  box-shadow: var(--shadow);
+  border: 0;
+}
+.card {
+  padding: 14px 16px;
+}
+.tag {
+  color: var(--brass-deep);
+}
+.label {
+  color: var(--muted);
+}
+.empty {
+  padding: 40px 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, nav button { transition: none; }
+}
