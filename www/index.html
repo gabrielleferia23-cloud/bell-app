@@ -136,6 +136,16 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
           <button type="button" class="btn ghost" id="teach-mic" hidden aria-pressed="false">Speak it</button>
         </div>
         <p class="status" id="teach-status"></p>
+        <div class="card" id="voice-card">
+          <h3>Bell's voice</h3>
+          <p class="hint" id="voice-name">Phone's default voice</p>
+          <label class="hint" for="voice-pitch">Older ← → Younger</label>
+          <input type="range" id="voice-pitch" min="0.9" max="1.7" step="0.05" value="1.35">
+          <div class="actions">
+            <button class="btn" id="voice-test">Hear Bell</button>
+            <button class="btn ghost" id="voice-next">Try another voice</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -487,12 +497,57 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   // ================= talking and listening: Android's own voice =================
   const Plugins = window.Capacitor?.Plugins || {};
   const TTS = Plugins.TextToSpeech, STT = Plugins.SpeechRecognition;
+  // Bell's voice: a fluent English girl's voice, picked from the voices on the phone.
+  const VOICE_KEY = "bell.voice.v1";
+  const voice = { list: [], index: -1, pitch: 1.35, rate: 1.0 };
+  try { Object.assign(voice, JSON.parse(localStorage.getItem(VOICE_KEY) || "{}")); voice.list = []; } catch {}
+  const saveVoice = () => { try { localStorage.setItem(VOICE_KEY, JSON.stringify({ name: voice.name, pitch: voice.pitch, rate: voice.rate })); } catch {} };
+  function voiceScore(v) {
+    const n = (v.name + " " + v.voiceURI).toLowerCase(), lang = (v.lang || "").toLowerCase().replace("_", "-");
+    if (!lang.startsWith("en")) return -1;
+    let s = 0;
+    if (lang === "en-us") s += 30; else if (lang === "en-gb") s += 25; else if (lang === "en-au") s += 15; else s += 5;
+    if (/female|sfg|tpc|tpf|iob|iog|gba|gbc|aua|smtf|f0\d|-f\d/.test(n)) s += 40;
+    if (/male|iol|iom|tpd|gbb|gbd|aub|smtm|m0\d|-m\d/.test(n) && !/female/.test(n)) s -= 40;
+    if (v.localService) s += 10;
+    if (/network/.test(n)) s -= 5;
+    return s;
+  }
+  async function loadVoices() {
+    if (!TTS?.getSupportedVoices) return;
+    const r = await TTS.getSupportedVoices().catch(() => ({ voices: [] }));
+    const all = (r.voices || []).map((v, i) => ({ ...v, i })).filter((v) => voiceScore(v) >= 0);
+    all.sort((a, b) => voiceScore(b) - voiceScore(a));
+    voice.list = all;
+    const saved = voice.name && all.find((v) => v.voiceURI === voice.name);
+    const pick = saved || all[0];
+    if (pick) { voice.index = pick.i; voice.name = pick.voiceURI; }
+    renderVoice();
+  }
+  function renderVoice() {
+    const el = $("voice-name"); if (!el) return;
+    const pos = voice.list.findIndex((v) => v.i === voice.index);
+    el.textContent = pos >= 0 ? `Voice ${pos + 1} of ${voice.list.length} (${voice.list[pos].lang})` : "Phone's default voice";
+    $("voice-pitch").value = voice.pitch;
+  }
   function speak(text) {
-    if (TTS) { TTS.stop().catch(() => {}).finally(() => TTS.speak({ text: text.slice(0, 3900), rate: 1.0, pitch: 1.05, category: "playback" }).catch(() => browserSpeak(text))); return; }
+    if (TTS) {
+      const opts = { text: text.slice(0, 3900), lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
+      if (voice.index >= 0) opts.voice = voice.index;
+      TTS.stop().catch(() => {}).finally(() => TTS.speak(opts).catch(() => browserSpeak(text)));
+      return;
+    }
     browserSpeak(text);
   }
   function browserSpeak(text) {
-    try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch {}
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
+      if (vs[0]) u.voice = vs[0];
+      u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
+      speechSynthesis.speak(u);
+    } catch {}
   }
   const canSpeak = () => !!TTS || "speechSynthesis" in window;
 
@@ -772,6 +827,18 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     $("brain-get").addEventListener("click", getBrain);
     $("brain-stop").addEventListener("click", () => Brain.cancelDownload());
   }
+
+  $("voice-test").addEventListener("click", () => speak("Hi! I'm Bell. Teach me anything, and I'll remember it for you."));
+  $("voice-next").addEventListener("click", () => {
+    if (!voice.list.length) return speak("This is the only voice I have on this phone.");
+    const pos = voice.list.findIndex((v) => v.i === voice.index);
+    const next = voice.list[(pos + 1) % voice.list.length];
+    voice.index = next.i; voice.name = next.voiceURI; saveVoice(); renderVoice();
+    speak("Hi! I'm Bell. How do I sound now?");
+  });
+  $("voice-pitch").addEventListener("change", (e) => { voice.pitch = Number(e.target.value); saveVoice(); speak("Hi! I'm Bell."); });
+  loadVoices();
+  renderVoice();
 
   // ================= start =================
   $("cam-btn").hidden = true;
