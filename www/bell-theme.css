@@ -292,3 +292,90 @@ textarea {
   width: 100%;
   accent-color: var(--brass-deep);
 }
+
+/* ---------- composer icons: camera, mic, and the colour-wave Ask orb ---------- */
+#ask-form .icon-btn {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+}
+.icon-btn svg,
+.orb svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#ask-mic[aria-pressed="true"] {
+  color: #fff;
+}
+
+@property --orb-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+#ask-form .btn.orb,
+.btn.orb:not(.ghost) {
+  position: relative;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  background: conic-gradient(from var(--orb-turn), #ff4d6d, #ffb347, #ffe66d, #5ce1a6, #4cc9f0, #7b61ff, #f15bb5, #ff4d6d);
+  box-shadow: 0 0 14px rgba(123, 97, 255, 0.45);
+  animation: orb-spin 3.2s linear infinite;
+  overflow: visible;
+}
+/* soft glowing halo that breathes like a sound wave */
+.btn.orb::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: inherit;
+  filter: blur(8px);
+  opacity: 0.55;
+  z-index: -1;
+  animation: orb-wave 1.8s ease-in-out infinite;
+}
+.orb-core {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--band);
+  color: #fff;
+}
+.orb-core svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.4;
+}
+.btn.orb:active {
+  transform: scale(0.94);
+}
+@keyframes orb-spin {
+  to { --orb-turn: 360deg; }
+}
+@keyframes orb-wave {
+  0%, 100% { transform: scale(0.92); opacity: 0.4; }
+  50% { transform: scale(1.12); opacity: 0.75; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.orb, .btn.orb::before { animation: none; }
+}

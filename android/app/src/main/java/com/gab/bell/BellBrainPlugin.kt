@@ -35,6 +35,7 @@ class BellBrainPlugin : Plugin() {
 
     private fun modelFile() = File(context.filesDir, "bell-brain.litertlm")
     private fun partFile() = File(context.filesDir, "bell-brain.litertlm.part")
+    private fun partUrlFile() = File(context.filesDir, "bell-brain.part-url")
 
     @PluginMethod
     fun status(call: PluginCall) {
@@ -63,6 +64,10 @@ class BellBrainPlugin : Plugin() {
                 var conn: HttpURLConnection
                 var redirects = 0
                 val part = partFile()
+                // a half-finished download of a different brain can't be continued
+                val partUrl = if (partUrlFile().exists()) partUrlFile().readText() else ""
+                if (partUrl != url && part.exists()) part.delete()
+                partUrlFile().writeText(url)
                 while (true) {
                     conn = URL(link).openConnection() as HttpURLConnection
                     conn.instanceFollowRedirects = false
@@ -104,7 +109,10 @@ class BellBrainPlugin : Plugin() {
                     }
                 }
                 if (expected > 0 && part.length() != expected) throw Exception("The download was incomplete. Try again.")
+                // put the old brain to sleep first, so the next load wakes up the new one
+                worker.submit { try { engine?.close() } catch (_: Exception) {}; engine = null; backendName = "" }.get()
                 if (!part.renameTo(modelFile())) throw Exception("Couldn't save the brain file")
+                partUrlFile().delete()
                 call.resolve(JSObject().put("bytes", modelFile().length()))
             } catch (e: Exception) {
                 call.reject(e.message ?: "Download failed")
