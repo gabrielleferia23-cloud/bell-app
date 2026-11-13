@@ -379,3 +379,27 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .btn.orb, .btn.orb::before { animation: none; }
 }
+
+/* ---------- hands-free chat pill ---------- */
+#handsfree-bar { display: flex; align-items: center; gap: 10px; margin: 2px 2px 8px; }
+#handsfree { border-radius: 999px; }
+#handsfree.live {
+  background: var(--warn);
+  color: #fff;
+  border: 0;
+  animation: hf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hf-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(180, 83, 26, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(180, 83, 26, 0); }
+}
+/* ---------- studio style chips ---------- */
+#vo-styles .style { cursor: pointer; border: 1px solid var(--line); }
+#vo-styles .style[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+#vo-picker .kind { cursor: pointer; }
+#vo-text { width: 100%; }
+@media (prefers-reduced-motion: reduce) { #handsfree.live { animation: none; } }

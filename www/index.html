@@ -98,6 +98,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   <nav role="tablist">
     <button role="tab" id="tab-talk" aria-selected="true" data-view="talk">Talk</button>
     <button role="tab" id="tab-teach" aria-selected="false" data-view="teach">Teach</button>
+    <button role="tab" id="tab-studio" aria-selected="false" data-view="studio">Studio</button>
     <button role="tab" id="tab-memory" aria-selected="false" data-view="memory">Memory</button>
   </nav>
   <main>
@@ -115,6 +116,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
         <div class="actions"><button class="btn" id="brain-up-btn">Get the smarter brain</button></div>
       </div>
       <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
+      <div id="handsfree-bar" hidden><button type="button" class="btn ghost" id="handsfree">🎧 Hands-free chat</button><span class="hint" id="handsfree-hint"></span></div>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
         <label class="btn ghost icon-btn" for="cam" id="cam-btn" title="Let Bell look through your camera" aria-label="Look with the camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></label>
@@ -151,6 +153,32 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
             <button class="btn" id="voice-test">Hear Bell</button>
             <button class="btn ghost" id="voice-next">Try another voice</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-studio" hidden>
+      <div class="scroll">
+        <div class="drop">
+          <h2>Voice-over studio</h2>
+          <p class="hint">Paste a script or load something Bell has learned, pick a style, and Bell reads it in her voice. It plays here on the phone.</p>
+          <textarea id="vo-text" rows="7" placeholder="Paste or type what Bell should read…"></textarea>
+          <div class="actions"><button type="button" class="btn ghost" id="vo-load">Use a saved file</button></div>
+          <div id="vo-picker" class="kinds" hidden></div>
+          <p class="label">Style</p>
+          <div class="kinds" id="vo-styles">
+            <button type="button" class="kind style" data-style="natural" aria-pressed="true">Natural</button>
+            <button type="button" class="kind style" data-style="story">Storytelling</button>
+            <button type="button" class="kind style" data-style="professional">Professional</button>
+            <button type="button" class="kind style" data-style="educational">Educational</button>
+            <button type="button" class="kind style" data-style="calm">Calm</button>
+            <button type="button" class="kind style" data-style="document">Document</button>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn" id="vo-play">▶ Play</button>
+            <button type="button" class="btn ghost" id="vo-stop" hidden>■ Stop</button>
+          </div>
+          <p class="status" id="vo-status"></p>
         </div>
       </div>
     </section>
@@ -734,30 +762,38 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     if (t) out.push(t);
     return out;
   }
-  function speak(text, btn) {
+  // styles for the voice-over studio: small, honest changes to pitch and speed
+  const STYLES = {
+    natural: { dp: 0, rate: 0.95 }, story: { dp: 0.08, rate: 0.9 }, professional: { dp: 0, rate: 1.0 },
+    educational: { dp: 0, rate: 0.82 }, calm: { dp: -0.06, rate: 0.84 }, document: { dp: 0, rate: 0.95 },
+  };
+  function speak(text, btn, style) {
     const seq = ++speakSeq;
     markSpeaking(btn, true);
-    (async () => {
+    const st = STYLES[style] || null;
+    const pitch = st ? Math.max(0.8, Math.min(1.6, voice.pitch + st.dp)) : voice.pitch;
+    const rate = st ? st.rate : voice.rate;
+    return (async () => {
       if (TTS) await TTS.stop().catch(() => {});
       for (const piece of pieces(text)) {
         if (seq !== speakSeq) return;
         if (TTS) {
-          const opts = { text: piece, lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
+          const opts = { text: piece, lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate, pitch, category: "playback" };
           if (voice.index >= 0) opts.voice = voice.index;
           try { await TTS.speak(opts); continue; } catch { if (seq !== speakSeq) return; }
         }
-        await browserSpeak(piece);
+        await browserSpeak(piece, pitch, rate);
       }
     })().finally(() => { if (seq === speakSeq) markSpeaking(null, false); });
   }
-  function browserSpeak(text) {
+  function browserSpeak(text, pitch, rate) {
     return new Promise((done) => {
       try {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
         if (vs[0]) u.voice = vs[0];
-        u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
+        u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, pitch ?? voice.pitch); u.rate = rate ?? voice.rate;
         u.onend = done; u.onerror = done;
         speechSynthesis.speak(u);
       } catch { done(); }
@@ -781,6 +817,110 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     const r = await STT.start({ popup: true, partialResults: false, maxResults: 1, prompt: "Speak to Bell" });
     return (r?.matches || [])[0] || "";
   }
+  // ================= hands-free conversation (free, on the phone) =================
+  // Bell listens, answers out loud, then listens again. Tap the button to stop or cut in.
+  const convo = { on: false, last: "", waiting: null, empties: 0 };
+  const sttLang = () => voice.list.find((v) => v.i === voice.index)?.lang || "en-US";
+  function wireConversationListeners() {
+    if (!STT || convo.wired) return; convo.wired = true;
+    STT.addListener("partialResults", (d) => { const m = (d && d.matches) || []; if (m[0]) convo.last = m[0]; });
+    STT.addListener("listeningState", (d) => {
+      if (d && d.status === "stopped" && convo.waiting) { const r = convo.waiting; r(convo.last); }
+    });
+  }
+  function listenTurn() {
+    return new Promise((resolve) => {
+      convo.last = ""; let done = false;
+      const finish = (v) => { if (done) return; done = true; clearTimeout(guard); convo.waiting = null; resolve((v || "").trim()); };
+      // the phone tells us when speech stops; this is a safety net if it never does
+      const guard = setTimeout(() => { STT.stop().catch(() => {}); finish(convo.last); }, 15000);
+      convo.waiting = finish;
+      STT.start({ popup: false, partialResults: true, language: sttLang() }).catch(() => finish(""));
+    });
+  }
+  function setHF(state) {
+    const b = $("handsfree"); if (!b) return;
+    b.setAttribute("aria-pressed", String(convo.on));
+    b.textContent = !convo.on ? "🎧 Hands-free chat" : state === "speaking" ? "● Bell is talking — tap to stop" : state === "thinking" ? "● Thinking — tap to stop" : "● Listening — tap to stop";
+    b.classList.toggle("live", convo.on);
+  }
+  async function startConversation() {
+    if (convo.on) return;
+    const perm = await STT.checkPermissions().catch(() => ({}));
+    if (perm.speechRecognition !== "granted") {
+      const asked = await STT.requestPermissions().catch(() => ({}));
+      if (asked.speechRecognition !== "granted") { addMsg("bot", "I need permission to use the microphone. Turn it on in your phone's Settings, under Apps, Bell, Permissions."); return; }
+    }
+    wireConversationListeners();
+    convo.on = true; convo.empties = 0; autoSpeak = true;
+    addMsg("bot", "I'm listening. Just talk to me, and tap the button when you want me to stop.");
+    runConversation();
+  }
+  function stopConversation(msg) {
+    if (!convo.on) return;
+    convo.on = false; autoSpeak = false;
+    STT.stop().catch(() => {}); stopSpeaking();
+    setHF();
+    if (msg) addMsg("bot", msg);
+  }
+  async function runConversation() {
+    while (convo.on) {
+      setHF("listening");
+      let said = "";
+      try { said = await listenTurn(); } catch { said = ""; }
+      if (!convo.on) break;
+      if (!said) { if (++convo.empties >= 3) { stopConversation("I didn't catch anything, so I stopped. Tap the button to talk again."); } else { await new Promise((r) => setTimeout(r, 300)); } continue; }
+      convo.empties = 0;
+      if (/^(stop|stop listening|stop talking|that'?s all|that is all|goodbye|good bye|bye|bye bye|never ?mind|thank you bell|thanks bell|you can stop|quiet|be quiet)\.?$/i.test(said)) {
+        addMsg("me", said); stopConversation("Okay, I've stopped listening. Tap the button whenever you want to talk again."); break;
+      }
+      setHF("thinking");
+      addMsg("me", said);
+      const hist = history.slice(-6).join("\n");
+      const thinking = addMsg("bot", "Thinking…"); history.pop();
+      const ans = await answerOf(said, hist, (t) => { thinking.firstChild.textContent = t || "Thinking…"; chat.scrollTop = chat.scrollHeight; });
+      thinking.remove();
+      if (!convo.on) break;
+      addMsg("bot", ans.text, ans.src);
+      setHF("speaking");
+      await speak(ans.text);
+    }
+  }
+  function wireHandsFree() {
+    const b = $("handsfree"); if (!b) return;
+    $("handsfree-bar").hidden = false;
+    $("handsfree-hint").textContent = "";
+    b.addEventListener("click", () => (convo.on ? stopConversation() : startConversation()));
+  }
+
+  // ================= voice-over studio =================
+  let voStyle = "natural";
+  function wireStudio() {
+    const styles = document.getElementById("vo-styles");
+    styles.addEventListener("click", (e) => {
+      const btn = e.target.closest(".style"); if (!btn) return;
+      voStyle = btn.dataset.style;
+      styles.querySelectorAll(".style").forEach((x) => x.setAttribute("aria-pressed", String(x === btn)));
+    });
+    $("vo-load").addEventListener("click", () => {
+      const box = $("vo-picker"); box.hidden = false; box.innerHTML = "";
+      if (!sources.length) { box.textContent = "Nothing learned yet. Add files in Teach first."; return; }
+      sources.slice().reverse().slice(0, 30).forEach((src) => {
+        const b = document.createElement("button"); b.type = "button"; b.className = "kind"; b.textContent = src.name;
+        b.addEventListener("click", () => { $("vo-text").value = (src.summary ? src.summary + "\n\n" : "") + fullText(src); box.hidden = true; setStatus("vo-status", `Loaded "${src.name}".`); });
+        box.append(b);
+      });
+    });
+    $("vo-play").addEventListener("click", () => {
+      const text = $("vo-text").value.trim();
+      if (!text) { setStatus("vo-status", "Paste or load something for Bell to read first.", true); return; }
+      if (!canSpeak()) { setStatus("vo-status", "This phone has no voice for Bell to use.", true); return; }
+      $("vo-stop").hidden = false; setStatus("vo-status", "Bell is reading…");
+      speak(text, null, voStyle).finally(() => { $("vo-stop").hidden = true; setStatus("vo-status", "Done."); });
+    });
+    $("vo-stop").addEventListener("click", () => { stopSpeaking(); $("vo-stop").hidden = true; setStatus("vo-status", "Stopped."); });
+  }
+
   function wireMic(btn, target, onDone) {
     btn.addEventListener("click", async () => {
       if (listening) return;
@@ -813,17 +953,20 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     return el;
   }
   let autoSpeak = false;
+  async function answerOf(question, hist, onText) {
+    try { return sample && $("smart").checked ? await smartAnswer(question, hist, onText) : plainAnswer(question); }
+    catch { return plainAnswer(question); }
+  }
   async function ask(question) {
     const hist = history.slice(-6).join("\n");
     addMsg("me", question);
     const thinking = addMsg("bot", "Thinking…"); history.pop();
-    let ans;
     const onText = (t) => { thinking.firstChild.textContent = t || "Thinking…"; chat.scrollTop = chat.scrollHeight; };
-    try { ans = sample && $("smart").checked ? await smartAnswer(question, hist, onText) : plainAnswer(question); }
-    catch { ans = plainAnswer(question); }
+    const ans = await answerOf(question, hist, onText);
     thinking.remove();
     addMsg("bot", ans.text, ans.src);
     if (autoSpeak) speak(ans.text);
+    return ans;
   }
   $("ask-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -985,7 +1128,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
   function show(view) {
     document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === view)));
-    for (const v of ["talk", "teach", "memory"]) $("view-" + v).hidden = v !== view;
+    for (const v of ["talk", "teach", "studio", "memory"]) $("view-" + v).hidden = v !== view;
   }
 
   $("search").addEventListener("input", renderList);
@@ -1117,6 +1260,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   $("voice-pitch").addEventListener("change", (e) => { voice.pitch = Number(e.target.value); saveVoice(); speak("Hi! I'm Bell."); });
   loadVoices();
   renderVoice();
+  wireStudio();
 
   // ================= start =================
   $("cam-btn").hidden = !Eyes();
@@ -1141,6 +1285,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
         $("ask-mic").hidden = false; $("teach-mic").hidden = false;
         wireMic($("ask-mic"), $("ask"), () => { const q = $("ask").value.trim(); if (q) { $("ask").value = ""; autoSpeak = true; ask(q).finally(() => { autoSpeak = false; }); } });
         wireMic($("teach-mic"), $("note-body"));
+        wireHandsFree();
       }
     }
   })();
