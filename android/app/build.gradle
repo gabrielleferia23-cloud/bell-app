@@ -63,6 +63,9 @@ dependencies {
     // Bell's on-phone AI brain
     implementation "com.google.ai.edge.litertlm:litertlm-android:$litertlmVersion"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
+    // Reads words in scanned pages and photos, offline
+    implementation "com.google.mlkit:text-recognition:16.0.1"
+    implementation "com.google.mlkit:image-labeling:17.0.9"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

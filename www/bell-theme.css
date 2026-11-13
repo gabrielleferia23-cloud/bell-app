@@ -286,3 +286,9 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .btn, nav button { transition: none; }
 }
+
+/* voice settings */
+#voice-card input[type="range"] {
+  width: 100%;
+  accent-color: var(--brass-deep);
+}

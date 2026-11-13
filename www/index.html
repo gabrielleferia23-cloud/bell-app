@@ -84,6 +84,7 @@ details.install { background: var(--surface); border: 1px solid var(--line); bor
 details.install summary { cursor: pointer; font-weight: 600; }
 details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: in 0.18s ease-out; } @keyframes in { from { transform: translateY(4px); opacity: 0.4; } } }
+#stop-reading { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 50; border-radius: 999px; padding-inline: 20px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
 </style>
 <link rel="stylesheet" href="bell-theme.css">
 </head>
@@ -122,9 +123,9 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       <div class="scroll">
         <div class="drop" id="drop">
           <h2>Give Bell a file</h2>
-          <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span></div>
+          <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span><span class="kind">Scans and photos of pages</span></div>
           <label class="btn" for="file">Choose files</label>
-          <input type="file" id="file" multiple hidden accept=".pdf,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.docx,.eml,.txt,.md,.json,.html,.htm,.xml,.rtf,.log,.mp3,.m4a,.wav,.flac,.ogg,.aac,audio/*,text/*,image/*">
+          <input type="file" id="file" multiple hidden>
           <div class="progress" id="prog" hidden><div></div></div>
           <p class="status" id="file-status"></p>
         </div>
@@ -136,6 +137,16 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
           <button type="button" class="btn ghost" id="teach-mic" hidden aria-pressed="false">Speak it</button>
         </div>
         <p class="status" id="teach-status"></p>
+        <div class="card" id="voice-card">
+          <h3>Bell's voice</h3>
+          <p class="hint" id="voice-name">Phone's default voice</p>
+          <label class="hint" for="voice-pitch">Older ← → Younger</label>
+          <input type="range" id="voice-pitch" min="0.9" max="1.7" step="0.05" value="1.35">
+          <div class="actions">
+            <button class="btn" id="voice-test">Hear Bell</button>
+            <button class="btn ghost" id="voice-next">Try another voice</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -301,20 +312,64 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   }
   const ext = (f) => (f.name.match(/\.([^.]+)$/) || [, ""])[1].toLowerCase();
 
+  // reading words in pictures (scanned pages), done on the phone by BellEyes
+  const Eyes = () => window.Capacitor?.Plugins?.BellEyes;
+  const NO_WORDS = "I couldn't find any words in it. If it's a scan or photo of a page, make sure it's sharp, bright and the right way up.";
+  async function readCanvas(c) {
+    const E = Eyes(); if (!E) throw new Error("This looks like a scanned file. Install the latest Bell app to read scans.");
+    try { const r = await E.readText({ image: c.toDataURL("image/jpeg", 0.85) }); return String(r.text || "").trim(); }
+    finally { c.width = c.height = 0; }
+  }
+  function imageCanvas(file, max = 2400) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, max / Math.max(im.width, im.height));
+        const c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url); res(c);
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("I couldn't open this picture. Try saving it as JPG or PNG.")); };
+      im.src = url;
+    });
+  }
+  async function readScan(file, progress) {
+    progress(0.3, "Reading the words in the picture");
+    const text = await readCanvas(await imageCanvas(file));
+    if (text.replace(/\s/g, "").length < 10) throw new Error(NO_WORDS);
+    return { kind: "scanned page", text, stats: "" };
+  }
   async function readPdf(file, progress) {
     await loadLib("pdf");
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
     const pages = [];
+    let scanned = 0;
     for (let p = 1; p <= pdf.numPages; p++) {
-      const content = await (await pdf.getPage(p)).getTextContent();
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
       let line = "";
       for (const it of content.items) { line += it.str; line += it.hasEOL ? "\n" : (it.str && !it.str.endsWith(" ") ? " " : ""); }
-      pages.push(line.replace(/[ \t]+/g, " ").trim());
+      line = line.replace(/[ \t]+/g, " ").trim();
+      if (line.replace(/\s/g, "").length < 30) {
+        // no real text layer: this page is a picture, so read the words in it
+        progress((p - 0.5) / pdf.numPages, `Reading scanned page ${p} of ${pdf.numPages}`);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(3, 2000 / Math.max(base.width, base.height) * 1.4) });
+        const c = document.createElement("canvas"); c.width = Math.round(viewport.width); c.height = Math.round(viewport.height);
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: g, viewport }).promise;
+        const seen = await readCanvas(c);
+        if (seen.length > line.length) { line = seen; scanned++; }
+      }
+      page.cleanup();
+      pages.push(line);
       progress(p / pdf.numPages, `Reading page ${p} of ${pdf.numPages}`);
     }
-    const text = pages.join("\n\n");
-    if (!text.trim()) throw new Error("This PDF has no readable text. It's probably scanned pictures of pages, which Bell can't read yet.");
-    return { kind: "PDF", text, stats: `It has ${pdf.numPages} page${pdf.numPages > 1 ? "s" : ""}.` };
+    const text = pages.filter(Boolean).join("\n\n");
+    if (text.replace(/\s/g, "").length < 10) throw new Error(NO_WORDS);
+    const n = pdf.numPages;
+    return { kind: scanned * 2 >= n ? "scanned PDF" : "PDF", text,
+      stats: `It has ${n} page${n > 1 ? "s" : ""}` + (scanned ? `, and I read ${n === 1 ? "it" : scanned === n ? "all of them" : scanned + " of them"} from the scanned picture${n === 1 ? "" : "s"}.` : ".") };
   }
   async function readSheet(file) {
     await loadLib("xlsx");
@@ -446,6 +501,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   async function readFile(file, progress) {
     const e = ext(file), t = file.type || "";
     if (e === "pdf" || t === "application/pdf") return readPdf(file, progress);
+    if (t.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif"].includes(e)) return readScan(file, progress);
     if (["xlsx", "xls", "xlsm", "ods"].includes(e)) return readSheet(file);
     if (["csv", "tsv"].includes(e)) return readCsv(file);
     if (e === "docx") return readDocx(file);
@@ -487,12 +543,84 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   // ================= talking and listening: Android's own voice =================
   const Plugins = window.Capacitor?.Plugins || {};
   const TTS = Plugins.TextToSpeech, STT = Plugins.SpeechRecognition;
-  function speak(text) {
-    if (TTS) { TTS.stop().catch(() => {}).finally(() => TTS.speak({ text: text.slice(0, 3900), rate: 1.0, pitch: 1.05, category: "playback" }).catch(() => browserSpeak(text))); return; }
-    browserSpeak(text);
+  // Bell's voice: a fluent English girl's voice, picked from the voices on the phone.
+  const VOICE_KEY = "bell.voice.v1";
+  const voice = { list: [], index: -1, pitch: 1.35, rate: 1.0 };
+  try { Object.assign(voice, JSON.parse(localStorage.getItem(VOICE_KEY) || "{}")); voice.list = []; } catch {}
+  const saveVoice = () => { try { localStorage.setItem(VOICE_KEY, JSON.stringify({ name: voice.name, pitch: voice.pitch, rate: voice.rate })); } catch {} };
+  function voiceScore(v) {
+    const n = (v.name + " " + v.voiceURI).toLowerCase(), lang = (v.lang || "").toLowerCase().replace("_", "-");
+    if (!lang.startsWith("en")) return -1;
+    let s = 0;
+    if (lang === "en-us") s += 30; else if (lang === "en-gb") s += 25; else if (lang === "en-au") s += 15; else s += 5;
+    if (/female|sfg|tpc|tpf|iob|iog|gba|gbc|aua|smtf|f0\d|-f\d/.test(n)) s += 40;
+    if (/male|iol|iom|tpd|gbb|gbd|aub|smtm|m0\d|-m\d/.test(n) && !/female/.test(n)) s -= 40;
+    if (v.localService) s += 10;
+    if (/network/.test(n)) s -= 5;
+    return s;
   }
-  function browserSpeak(text) {
-    try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch {}
+  async function loadVoices() {
+    if (!TTS?.getSupportedVoices) return;
+    const r = await TTS.getSupportedVoices().catch(() => ({ voices: [] }));
+    const all = (r.voices || []).map((v, i) => ({ ...v, i })).filter((v) => voiceScore(v) >= 0);
+    all.sort((a, b) => voiceScore(b) - voiceScore(a));
+    voice.list = all;
+    const saved = voice.name && all.find((v) => v.voiceURI === voice.name);
+    const pick = saved || all[0];
+    if (pick) { voice.index = pick.i; voice.name = pick.voiceURI; }
+    renderVoice();
+  }
+  function renderVoice() {
+    const el = $("voice-name"); if (!el) return;
+    const pos = voice.list.findIndex((v) => v.i === voice.index);
+    el.textContent = pos >= 0 ? `Voice ${pos + 1} of ${voice.list.length} (${voice.list[pos].lang})` : "Phone's default voice";
+    $("voice-pitch").value = voice.pitch;
+  }
+  // reading aloud: every "Read aloud" button turns into "Stop" while Bell talks,
+  // and a "Stop reading" button floats on screen until she finishes
+  let speakingBtn = null, speakSeq = 0;
+  function markSpeaking(btn, on) {
+    if (speakingBtn) { speakingBtn.textContent = "Read aloud"; speakingBtn.removeAttribute("aria-pressed"); }
+    speakingBtn = btn || null;
+    if (btn) { btn.textContent = "Stop"; btn.setAttribute("aria-pressed", "true"); }
+    const bar = $("stop-reading"); if (bar) bar.hidden = !on;
+  }
+  function stopSpeaking() {
+    speakSeq++; markSpeaking(null, false);
+    if (TTS) TTS.stop().catch(() => {});
+    try { speechSynthesis.cancel(); } catch {}
+  }
+  function speak(text, btn) {
+    const seq = ++speakSeq;
+    markSpeaking(btn, true);
+    const done = () => { if (seq === speakSeq) markSpeaking(null, false); };
+    if (TTS) {
+      const opts = { text: text.slice(0, 3900), lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
+      if (voice.index >= 0) opts.voice = voice.index;
+      TTS.stop().catch(() => {}).finally(() => {
+        if (seq !== speakSeq) return;
+        TTS.speak(opts).then(done, () => { if (seq === speakSeq) browserSpeak(text, done); });
+      });
+      return;
+    }
+    browserSpeak(text, done);
+  }
+  function browserSpeak(text, done) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
+      if (vs[0]) u.voice = vs[0];
+      u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
+      if (done) { u.onend = done; u.onerror = done; }
+      speechSynthesis.speak(u);
+    } catch { done?.(); }
+  }
+  document.addEventListener("click", (e) => { if (e.target.closest?.("#stop-reading")) stopSpeaking(); });
+  function readButton(getText) {
+    const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.textContent = "Read aloud";
+    b.addEventListener("click", () => (speakingBtn === b ? stopSpeaking() : speak(getText(), b)));
+    return b;
   }
   const canSpeak = () => !!TTS || "speechSynthesis" in window;
 
@@ -530,8 +658,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     if (src) { const s = document.createElement("span"); s.className = "src"; s.textContent = src; el.append(s); }
     if (who === "bot" && canSpeak() && !/^(Thinking|Looking)…$/.test(text)) {
       const wrap = document.createElement("div"); wrap.className = "tools";
-      const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.textContent = "Read aloud";
-      b.addEventListener("click", () => speak(text)); wrap.append(b); el.append(wrap);
+      wrap.append(readButton(() => text)); el.append(wrap);
     }
     chat.append(el);
     chat.scrollTop = chat.scrollHeight;
@@ -586,6 +713,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     });
   }
   async function see(file, question) {
+    if (Eyes()) return seeOnPhone(file, question);
     const thumb = await thumbnail(file);
     addMsg("me", question || "Look at this.", null, thumb);
     if (!canSee) {
@@ -611,6 +739,53 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       thinking.remove();
       addMsg("bot", e?.code === "rate_limited" ? "I've looked at a lot just now. Give me a minute, then try again." :
         e?.code === "image_rejected" ? "I couldn't open that picture. Try taking it again." : "I couldn't look at that photo. Check your connection and try again.");
+      return false;
+    }
+  }
+  // seeing on the phone itself: names the things in the photo and reads any words,
+  // then saves only that understanding. The photo itself is not kept.
+  const listWords = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  async function seeOnPhone(file, question) {
+    const thumb = await thumbnail(file);
+    addMsg("me", question || "Look at this.", null, thumb);
+    const thinking = addMsg("bot", "Looking…"); history.pop();
+    try {
+      const c = await imageCanvas(file, 1600);
+      let r;
+      try { r = await Eyes().look({ image: c.toDataURL("image/jpeg", 0.85) }); } finally { c.width = c.height = 0; }
+      const labels = [...new Set((r.labels || []).filter((l) => l.confidence >= 0.6).map((l) => String(l.text).toLowerCase()))].slice(0, 8);
+      const words = String(r.text || "").trim();
+      if (!labels.length && words.replace(/\s/g, "").length < 3) {
+        thinking.remove();
+        addMsg("bot", "I couldn't make out what that is. Try again with more light, a bit closer, and hold the phone still.");
+        return false;
+      }
+      const when = new Date().toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+      const firstLine = words.split("\n").map((l) => l.trim()).find((l) => l.length > 2) || "";
+      const title = (firstLine ? firstLine.split(/\s+/).slice(0, 6).join(" ") : labels.slice(0, 3).map((l) => l[0].toUpperCase() + l.slice(1)).join(", ")).slice(0, 60) || "Something I saw";
+      const desc = `Photo taken ${when}.` + (question ? ` The user asked: ${question}.` : "") +
+        (labels.length ? ` Things I could see in it: ${labels.join(", ")}.` : "") + (words ? ` Words written in it: ${words}` : "");
+      let reply = (labels.length ? `I can see ${listWords(labels.slice(0, 5))}.` : "") +
+        (words ? ` I read ${words.length > 200 ? "the writing on it" : `"${words.replace(/\s+/g, " ")}"`}.` : "");
+      if (sample) {
+        try {
+          const t = (await sample("You just looked at a photo through the user's phone camera. Here is what you noticed:\n" + desc +
+            "\n\nIn 2 or 3 friendly sentences, tell the user what you see" + (question ? " and answer their question: " + question : "") +
+            ". Plain text, no markdown.", {})).text.trim();
+          if (t) reply = t;
+        } catch {}
+      }
+      const parts = cut(desc);
+      const src = { id: newId(), name: `${title} (${when})`, kind: "photo", createdAt: Date.now(), size: desc.length, parts: parts.length, summary: reply };
+      await store.put(src, parts);
+      changed();
+      thinking.remove();
+      addMsg("bot", reply.trim(), "Saved to my memory as \"" + title + "\". I didn't keep the photo.");
+      if (autoSpeak) speak(reply);
+      return true;
+    } catch (e) {
+      thinking.remove();
+      addMsg("bot", e?.message === "full" ? "This phone's storage for Bell is full. Forget some old things and try again." : "I couldn't look at that photo. Try taking it again.");
       return false;
     }
   }
@@ -698,8 +873,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       d.textContent = new Date(s.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + (s.kind !== "note" && s.size ? " · " + fmtSize(s.size) : "");
       const acts = document.createElement("div"); acts.className = "actions";
       if (canSpeak()) {
-        const r = document.createElement("button"); r.className = "btn ghost small"; r.textContent = "Read aloud";
-        r.addEventListener("click", () => speak(s.name + ". " + (s.summary || fullText(s).slice(0, 2000)))); acts.append(r);
+        acts.append(readButton(() => s.name + ". " + (s.summary || fullText(s).slice(0, 2000))));
       }
       const del = document.createElement("button"); del.className = "btn ghost small"; del.textContent = "Forget";
       del.addEventListener("click", () => {
@@ -716,11 +890,10 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   let renderTimer = null;
   function changed() {
     index = null;
+    const setCount = () => { $("count").textContent = !sources.length ? "Nothing learned yet" : sources.length === 1 ? "Knows 1 thing" : `Knows ${sources.length} things`; };
+    setCount();
     clearTimeout(renderTimer);
-    renderTimer = setTimeout(() => {
-      $("count").textContent = !sources.length ? "Nothing learned yet" : sources.length === 1 ? "Knows 1 thing" : `Knows ${sources.length} things`;
-      renderList();
-    }, 50);
+    renderTimer = setTimeout(() => { setCount(); renderList(); }, 50);
   }
 
   // ================= Bell's AI brain (runs on the phone) =================
@@ -773,8 +946,20 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     $("brain-stop").addEventListener("click", () => Brain.cancelDownload());
   }
 
+  $("voice-test").addEventListener("click", () => speak("Hi! I'm Bell. Teach me anything, and I'll remember it for you."));
+  $("voice-next").addEventListener("click", () => {
+    if (!voice.list.length) return speak("This is the only voice I have on this phone.");
+    const pos = voice.list.findIndex((v) => v.i === voice.index);
+    const next = voice.list[(pos + 1) % voice.list.length];
+    voice.index = next.i; voice.name = next.voiceURI; saveVoice(); renderVoice();
+    speak("Hi! I'm Bell. How do I sound now?");
+  });
+  $("voice-pitch").addEventListener("change", (e) => { voice.pitch = Number(e.target.value); saveVoice(); speak("Hi! I'm Bell."); });
+  loadVoices();
+  renderVoice();
+
   // ================= start =================
-  $("cam-btn").hidden = true;
+  $("cam-btn").hidden = !Eyes();
   (async () => {
     try { await loadAll(); } catch { addMsg("bot", "I couldn't open my memory on this phone. Try closing and reopening the app."); }
     changed();
@@ -802,5 +987,6 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 })();
 </script>
 
+<button type="button" id="stop-reading" class="btn" hidden>■ Stop reading</button>
 </body>
 </html>
