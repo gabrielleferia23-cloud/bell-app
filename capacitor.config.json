@@ -1,0 +1,6 @@
+{
+  "appId": "com.gab.bell",
+  "appName": "Bell",
+  "webDir": "www",
+  "android": { "allowMixedContent": false }
+}

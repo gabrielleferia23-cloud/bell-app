@@ -1,0 +1,72 @@
+name: Build Bell APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install and prepare the app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build the APK
+        id: build
+        working-directory: android
+        env:
+          BELL_VERSION_CODE: ${{ github.run_number }}
+          PW: ${{ secrets.BELL_KEYSTORE_PASSWORD }}
+          KEY_B64: ${{ secrets.BELL_KEYSTORE_BASE64 }}
+        run: |
+          chmod +x gradlew
+          if [ -n "$PW" ] && [ -n "$KEY_B64" ]; then
+            # Signed with the same key every time, so each new APK installs over the old one.
+            echo "$KEY_B64" | base64 -d > "$RUNNER_TEMP/bell.keystore"
+            export BELL_KEYSTORE_FILE="$RUNNER_TEMP/bell.keystore"
+            export BELL_KEYSTORE_PASSWORD="$PW" BELL_KEY_PASSWORD="$PW" BELL_KEY_ALIAS=bell
+            ./gradlew assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Bell-1.${{ github.run_number }}.apk"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The signing secrets BELL_KEYSTORE_BASE64 and BELL_KEYSTORE_PASSWORD are not set, so this is only a test build and was not published."
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Bell-test.apk"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Keep the test build
+        if: steps.build.outputs.signed == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bell-test-apk
+          path: Bell-test.apk
+
+      - name: Publish the APK as a release
+        if: steps.build.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v1.${{ github.run_number }}" "Bell-1.${{ github.run_number }}.apk" \
+            --title "Bell 1.${{ github.run_number }}" \
+            --notes "Download Bell-1.${{ github.run_number }}.apk on your phone and tap it to install or update."

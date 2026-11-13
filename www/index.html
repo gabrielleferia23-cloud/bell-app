@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bell</title>
+<meta name="theme-color" content="#3d4fd6">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+/* Layout: one-screen phone app. Header, three tabs (Talk, Teach, Memory), content scrolls, composer pinned at the bottom of Talk. */
+:root {
+  --bg: #f6f7fb; --surface: #ffffff; --fg: #1b1e2b; --muted: #636a80; --line: #dfe2ec;
+  --accent: #3d4fd6; --accent-fg: #ffffff; --accent-soft: #e6e9fc; --me: #3d4fd6; --me-fg: #ffffff;
+  --ok: #1f8a5b; --warn: #b4531a; --bar: #3d4fd6;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12141c; --surface: #1b1e2a; --fg: #e8eaf3; --muted: #9aa1b8; --line: #2c3042;
+  --accent: #8d9bff; --accent-fg: #12141c; --accent-soft: #252a45; --me: #5465e6; --me-fg: #ffffff;
+  --ok: #4fc792; --warn: #f0a46c; --bar: #8d9bff; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12141c; --surface: #1b1e2a; --fg: #e8eaf3; --muted: #9aa1b8; --line: #2c3042;
+  --accent: #8d9bff; --accent-fg: #12141c; --accent-soft: #252a45; --me: #5465e6; --me-fg: #ffffff;
+  --ok: #4fc792; --warn: #f0a46c; --bar: #8d9bff; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.app { height: 100%; display: flex; flex-direction: column; max-width: 680px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { padding-block: 14px 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font: 600 1.15rem var(--display); }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; margin: 0; letter-spacing: -0.01em; line-height: 1; }
+.count { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+nav button { border: 0; background: transparent; color: var(--muted); font: 600 0.95rem var(--body); padding: 9px 4px; border-radius: 9px; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--accent-soft); color: var(--fg); }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-block: 12px; }
+section { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-block: 4px; }
+.scroll > * { flex-shrink: 0; }
+.msg { max-width: 88%; padding: 10px 13px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.bot { background: var(--surface); border: 1px solid var(--line); align-self: flex-start; border-bottom-left-radius: 4px; }
+.msg.me { background: var(--me); color: var(--me-fg); align-self: flex-end; border-bottom-right-radius: 4px; }
+.msg .src { display: block; margin-top: 6px; font-size: 0.78rem; color: var(--muted); white-space: normal; }
+.msg .tools { margin-top: 6px; white-space: normal; }
+.msg img, .card img.thumb { display: block; max-width: 100%; border-radius: 10px; margin-bottom: 6px; }
+.msg img { max-height: 240px; }
+.card img.thumb { max-height: 180px; object-fit: cover; width: 100%; }
+.row { display: flex; gap: 8px; align-items: flex-end; }
+textarea, input[type="text"], input[type="search"] { width: 100%; min-width: 0; font: inherit; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; resize: none; }
+textarea:focus, input:focus, button:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { border: 0; border-radius: 12px; padding: 10px 14px; font: 600 0.95rem var(--body); cursor: pointer; background: var(--accent); color: var(--accent-fg); white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
+.btn.ghost { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+.btn.small { padding: 5px 10px; font-size: 0.82rem; border-radius: 9px; }
+.btn[aria-pressed="true"] { background: var(--warn); color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.drop { border: 1.5px dashed var(--line); border-radius: 16px; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop h2 { margin: 0; font: 600 1.15rem var(--display); }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.kind { font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--fg); }
+.label { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 6px 0 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.card h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.card p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.card .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 0.8rem; flex-wrap: wrap; }
+.tag { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: 0.88rem; margin: 0; }
+.status { font-size: 0.88rem; color: var(--ok); min-height: 1.2em; margin: 0; }
+.status.err { color: var(--warn); }
+.progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; width: 100%; }
+.progress > div { height: 100%; width: 0; background: var(--bar); transition: width 0.2s; }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); }
+.empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+details.install { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+details.install summary { cursor: pointer; font-weight: 600; }
+details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .msg { animation: in 0.18s ease-out; } @keyframes in { from { transform: translateY(4px); opacity: 0.4; } } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="brand"><div class="avatar" aria-hidden="true">B</div><h1>Bell</h1></div>
+    <span class="count" id="count">Nothing learned yet</span>
+  </header>
+  <nav role="tablist">
+    <button role="tab" id="tab-talk" aria-selected="true" data-view="talk">Talk</button>
+    <button role="tab" id="tab-teach" aria-selected="false" data-view="teach">Teach</button>
+    <button role="tab" id="tab-memory" aria-selected="false" data-view="memory">Memory</button>
+  </nav>
+  <main>
+    <section id="view-talk">
+      <div class="scroll" id="chat" aria-live="polite"></div>
+      <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Smart replies (Bell writes answers in her own words, using only what you taught her)</label>
+      <form class="row" id="ask-form">
+        <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
+        <label class="btn ghost" for="cam" id="cam-btn" title="Let Bell look through your camera">Look</label>
+        <input type="file" id="cam" accept="image/*" capture="environment" hidden>
+        <button type="button" class="btn ghost" id="ask-mic" hidden aria-pressed="false" title="Speak to Bell">Mic</button>
+        <button class="btn" id="ask-send">Ask</button>
+      </form>
+    </section>
+
+    <section id="view-teach" hidden>
+      <div class="scroll">
+        <div class="drop" id="drop">
+          <h2>Give Bell a file</h2>
+          <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span></div>
+          <label class="btn" for="file">Choose files</label>
+          <input type="file" id="file" multiple hidden accept=".pdf,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.docx,.eml,.txt,.md,.json,.html,.htm,.xml,.rtf,.log,.mp3,.m4a,.wav,.flac,.ogg,.aac,audio/*,text/*,image/*">
+          <div class="progress" id="prog" hidden><div></div></div>
+          <p class="status" id="file-status"></p>
+        </div>
+        <p class="label">Or tell her something</p>
+        <input type="text" id="note-title" placeholder="Title (optional), e.g. Mom's birthday">
+        <textarea id="note-body" rows="5" placeholder="What should Bell learn?"></textarea>
+        <div class="actions">
+          <button class="btn" id="save">Save to Bell's memory</button>
+          <button type="button" class="btn ghost" id="teach-mic" hidden aria-pressed="false">Speak it</button>
+        </div>
+        <p class="status" id="teach-status"></p>
+      </div>
+    </section>
+
+    <section id="view-memory" hidden>
+      <input type="search" id="search" placeholder="Search Bell's memory">
+      <div class="scroll" id="list"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const CHUNK = 50000;                  // characters per stored piece
+  const MAX_TEXT = 6000000;             // most text Bell keeps from one file
+  const LIBS = {
+    pdf: ["vendor/pdf.worker.min.js", "vendor/pdf.min.js"],
+    xlsx: ["vendor/xlsx.full.min.js"],
+    docx: ["vendor/mammoth.browser.min.js"],
+  };
+
+  // ================= storage: everything stays on this phone =================
+  // sources: {id, name, kind, summary, createdAt, size, parts}
+  // chunks:  {id, sourceId, idx, text}
+  let sources = [], chunks = [];
+  let dbp = null;
+  function idb() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open("bell", 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore("sources", { keyPath: "id" }); r.result.createObjectStore("chunks", { keyPath: "id" }); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(stores, mode, fn) {
+    const db = await idb();
+    return new Promise((res, rej) => {
+      const t = db.transaction(stores, mode); const out = fn(t);
+      t.oncomplete = () => res(out); t.onerror = () => rej(t.error?.name === "QuotaExceededError" ? new Error("full") : t.error); t.onabort = t.onerror;
+    });
+  }
+  async function loadAll() {
+    const got = {};
+    await tx(["sources", "chunks"], "readonly", (t) => {
+      for (const n of ["sources", "chunks"]) { const r = t.objectStore(n).getAll(); r.onsuccess = () => { got[n] = r.result; }; }
+    });
+    sources = got.sources || []; chunks = got.chunks || [];
+    if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+  }
+  const store = {
+    async put(src, parts) {
+      const rows = parts.map((t, i) => ({ id: src.id + "-" + i, sourceId: src.id, idx: i, text: t }));
+      await tx(["sources", "chunks"], "readwrite", (t) => { rows.forEach((r) => t.objectStore("chunks").put(r)); t.objectStore("sources").put(src); });
+      sources.push(src); chunks.push(...rows); changed();
+    },
+    async setSummary(id, summary) {
+      const s = sources.find((x) => x.id === id); if (!s) return;
+      s.summary = summary; await tx(["sources"], "readwrite", (t) => t.objectStore("sources").put(s)); changed();
+    },
+    async remove(id) {
+      const ids = chunks.filter((c) => c.sourceId === id).map((c) => c.id);
+      await tx(["sources", "chunks"], "readwrite", (t) => { ids.forEach((k) => t.objectStore("chunks").delete(k)); t.objectStore("sources").delete(id); });
+      sources = sources.filter((s) => s.id !== id); chunks = chunks.filter((c) => c.sourceId !== id); changed();
+    },
+  };
+
+  // ================= studying: break text into sentences and index the words =================
+  const STOP = new Set("a an and are as at be been but by can could did do does for from had has have he her his how i if in into is it its me my of on or our she so that the their them then there these they this to was we were what when where which who why will with would you your about tell know remember please bell does did any some all".split(" "));
+  const stem = (w) => w.replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "") || w;
+  const words = (t) => (t.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter((w) => !STOP.has(w) && (w.length > 1 || /\d/.test(w))).map(stem);
+  function splitSentences(t) {
+    const out = [];
+    for (let s of t.split(/(?<=[.!?])\s+|\n+/)) {
+      s = s.trim(); if (!s) continue;
+      while (s.length > 400) { let cut = s.lastIndexOf(" ", 400); if (cut < 200) cut = 400; out.push(s.slice(0, cut)); s = s.slice(cut).trim(); }
+      out.push(s);
+    }
+    return out;
+  }
+  let index = null;
+  function buildIndex() {
+    const sents = [], df = new Map();
+    const byId = new Map(sources.map((s) => [s.id, s]));
+    const ordered = chunks.slice().sort((a, b) => a.sourceId === b.sourceId ? a.idx - b.idx : a.sourceId < b.sourceId ? -1 : 1);
+    const add = (src, text, isSummary) => {
+      const w = words(text); sents.push({ src, text, w: new Set(w), isSummary });
+      for (const x of new Set(w)) df.set(x, (df.get(x) || 0) + 1);
+    };
+    for (const c of ordered) { const src = byId.get(c.sourceId); if (src) for (const s of splitSentences(c.text)) add(src, s, false); }
+    for (const src of sources) {
+      for (const s of splitSentences(src.summary || "")) add(src, s, true);
+      add(src, src.name, true);
+    }
+    const titleWords = new Map(sources.map((s) => [s.id, new Set(words(s.name))]));
+    index = { sents, df, titleWords };
+  }
+  function search(query, max = 5) {
+    if (!index) buildIndex();
+    const q = [...new Set(words(query))];
+    if (!q.length) return [];
+    const N = index.sents.length || 1;
+    const idf = q.map((w) => Math.log(1 + N / (index.df.get(w) || 1)));
+    const out = [];
+    index.sents.forEach((s, i) => {
+      let score = 0, hits = 0;
+      const tw = index.titleWords.get(s.src.id);
+      q.forEach((w, k) => { if (s.w.has(w)) { score += idf[k]; hits++; } if (tw?.has(w)) score += idf[k] * 0.4; });
+      if (hits) out.push({ i, s, score: score * (1 + hits / q.length) });
+    });
+    return out.sort((a, b) => b.score - a.score).slice(0, max);
+  }
+  const around = (i) => [index.sents[i - 1], index.sents[i], index.sents[i + 1]].filter((x) => x && x.src === index.sents[i].src && !x.isSummary).map((x) => x.text).join(" ");
+
+  function plainAnswer(question) {
+    if (!sources.length) return { text: "I haven't learned anything yet. Open Teach and give me a file or tell me something, then ask me about it." };
+    const hits = search(question, 3).filter((h) => !h.s.isSummary || h.s.text !== h.s.src.name);
+    if (!hits.length) return { text: "I haven't learned that yet. You can teach me in the Teach tab." };
+    const best = hits[0].score;
+    const kept = hits.filter((h) => h.score >= best * 0.5);
+    const text = kept.length === 1 ? "Here's what I learned: " + kept[0].s.text
+      : "Here's what I learned:\n" + kept.map((h) => "• " + h.s.text).join("\n");
+    return { text, src: "From: " + [...new Set(kept.map((h) => h.s.src.name))].join(", ") };
+  }
+
+  // ================= Claude-powered extras (smart replies, study summaries) =================
+  let sample = null;
+  const PERSONA = "You are Bell, a warm, friendly personal assistant who learns only from what the user gives her. ";
+  async function smartAnswer(question, history) {
+    if (!index) buildIndex();
+    const hits = search(question, 14);
+    const seen = new Set(), parts = [];
+    for (const h of hits) { const t = h.s.isSummary ? h.s.text : around(h.i); if (seen.has(t)) continue; seen.add(t); parts.push(`(${h.s.src.name}) ${t}`); }
+    const catalog = sources.slice(-40).map((s) => `- ${s.name} [${s.kind}]${s.summary ? ": " + s.summary.slice(0, 300) : ""}`).join("\n");
+    const prompt = PERSONA + "Answer the user's question using ONLY the material below. If it doesn't contain the answer, say you haven't learned that yet and suggest they teach you. " +
+      "Keep it short and conversational, plain text, no markdown.\n\nTHINGS YOU HAVE LEARNED:\n" + (catalog || "(nothing yet)") +
+      "\n\nRELEVANT PASSAGES:\n" + (parts.join("\n").slice(0, 14000) || "(none found)") +
+      (history ? "\n\nRECENT CONVERSATION:\n" + history : "") + "\n\nQUESTION: " + question;
+    const r = await sample(prompt, { modelTier: "quick", cache: false });
+    return { text: r.text.trim(), src: hits.length ? "From: " + [...new Set(hits.slice(0, 4).map((h) => h.s.src.name))].join(", ") : "" };
+  }
+  async function studySummary(name, kind, text) {
+    const n = text.length;
+    const excerpt = n > 12000 ? text.slice(0, 7000) + "\n…\n" + text.slice(Math.floor(n / 2), Math.floor(n / 2) + 2500) + "\n…\n" + text.slice(-2500) : text;
+    const r = await sample(PERSONA + `The user just gave you a ${kind} called "${name}". Study it, then tell them in 2 to 4 friendly sentences what it is and the main things you learned from it, ` +
+      "so they know you understood it. Plain text, no markdown, no preamble.\n\nCONTENT:\n" + excerpt, { modelTier: "quick", cache: false });
+    return r.text.trim();
+  }
+  function quickStudy(kind, text, stats) {
+    const freq = new Map();
+    for (const w of (text.toLowerCase().match(/[\p{L}]{4,}/gu) || [])) if (!STOP.has(w)) freq.set(w, (freq.get(w) || 0) + 1);
+    const top = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([w]) => w);
+    return `${stats}${top.length ? " It talks a lot about " + top.join(", ") + "." : ""}`;
+  }
+
+  // ================= reading files =================
+  const loaded = {};
+  function loadLib(name) {
+    if (!loaded[name]) loaded[name] = LIBS[name].reduce((p, src) => p.then(() => new Promise((res, rej) => {
+      const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("lib")); document.head.append(s);
+    })), Promise.resolve());
+    return loaded[name];
+  }
+  const ext = (f) => (f.name.match(/\.([^.]+)$/) || [, ""])[1].toLowerCase();
+
+  async function readPdf(file, progress) {
+    await loadLib("pdf");
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+    const pages = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const content = await (await pdf.getPage(p)).getTextContent();
+      let line = "";
+      for (const it of content.items) { line += it.str; line += it.hasEOL ? "\n" : (it.str && !it.str.endsWith(" ") ? " " : ""); }
+      pages.push(line.replace(/[ \t]+/g, " ").trim());
+      progress(p / pdf.numPages, `Reading page ${p} of ${pdf.numPages}`);
+    }
+    const text = pages.join("\n\n");
+    if (!text.trim()) throw new Error("This PDF has no readable text. It's probably scanned pictures of pages, which Bell can't read yet.");
+    return { kind: "PDF", text, stats: `It has ${pdf.numPages} page${pdf.numPages > 1 ? "s" : ""}.` };
+  }
+  async function readSheet(file) {
+    await loadLib("xlsx");
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const lines = []; let rowsTotal = 0;
+    for (const name of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, blankrows: false });
+      if (!rows.length) continue;
+      const head = rows[0].map((h, i) => String(h ?? "").trim() || "Column " + (i + 1));
+      const useHead = rows.length > 1 && rows[0].every((h) => h == null || isNaN(Number(h)));
+      rows.slice(useHead ? 1 : 0).forEach((r, i) => {
+        const cells = r.map((v, c) => v == null || v === "" ? null : (useHead ? head[c] + ": " : "") + String(v).trim()).filter(Boolean);
+        if (cells.length) { lines.push(`${name} row ${i + (useHead ? 2 : 1)}: ${cells.join("; ")}.`); rowsTotal++; }
+      });
+    }
+    return { kind: "spreadsheet", text: lines.join("\n"), stats: `It has ${wb.SheetNames.length} sheet${wb.SheetNames.length > 1 ? "s" : ""} and ${rowsTotal} rows of data.` };
+  }
+  async function readDocx(file) {
+    await loadLib("docx");
+    const r = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+    return { kind: "Word document", text: r.value, stats: "" };
+  }
+  function decodeQP(s) { return s.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))); }
+  function decodeBody(body, enc, charset) {
+    let bytes;
+    if (/base64/i.test(enc)) { try { bytes = Uint8Array.from(atob(body.replace(/\s+/g, "")), (c) => c.charCodeAt(0)); } catch { return body; } }
+    else if (/quoted-printable/i.test(enc)) bytes = Uint8Array.from(decodeQP(body), (c) => c.charCodeAt(0) & 255);
+    else return body;
+    try { return new TextDecoder(charset || "utf-8").decode(bytes); } catch { return new TextDecoder().decode(bytes); }
+  }
+  function decodeWords(s) {
+    return s.replace(/=\?([^?]+)\?([BQ])\?([^?]*)\?=/gi, (_, cs, mode, txt) => {
+      try { const bin = mode.toUpperCase() === "B" ? atob(txt) : decodeQP(txt.replace(/_/g, " "));
+        return new TextDecoder(cs).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0) & 255)); } catch { return txt; }
+    });
+  }
+  function parsePart(raw) {
+    const split = raw.search(/\r?\n\r?\n/);
+    const headText = split < 0 ? raw : raw.slice(0, split), body = split < 0 ? "" : raw.slice(split).replace(/^\r?\n\r?\n/, "");
+    const h = {};
+    for (const line of headText.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/)) { const m = line.match(/^([\w-]+):\s*(.*)$/); if (m) h[m[1].toLowerCase()] = m[2]; }
+    return { h, body };
+  }
+  function emailText(part) {
+    const ct = part.h["content-type"] || "text/plain";
+    const b = ct.match(/boundary="?([^";]+)"?/i);
+    if (/^multipart/i.test(ct) && b) {
+      const parts = part.body.split("--" + b[1]).slice(1).filter((p) => !p.startsWith("--")).map(parsePart);
+      const plain = parts.map(emailText).filter(Boolean);
+      return plain.find((t) => !t.html)?.text ? plain.find((t) => !t.html) : plain[0];
+    }
+    if (!/^text\//i.test(ct)) return null;
+    const charset = (ct.match(/charset="?([^";]+)/i) || [])[1];
+    let text = decodeBody(part.body, part.h["content-transfer-encoding"] || "", charset);
+    const html = /text\/html/i.test(ct);
+    if (html) text = new DOMParser().parseFromString(text, "text/html").body.textContent || "";
+    return { text, html };
+  }
+  async function readEmail(file) {
+    const top = parsePart(await file.text());
+    const body = emailText(top)?.text || "";
+    const head = ["from", "to", "cc", "date", "subject"].filter((k) => top.h[k]).map((k) => `${k[0].toUpperCase() + k.slice(1)}: ${decodeWords(top.h[k])}.`).join("\n");
+    return { kind: "email", text: head + "\n\n" + body.trim(), stats: top.h.subject ? `It's an email about "${decodeWords(top.h.subject)}".` : "", name: top.h.subject ? decodeWords(top.h.subject) : null };
+  }
+  function id3(buf) {
+    const b = new Uint8Array(buf), tags = {};
+    if (b[0] !== 0x49 || b[1] !== 0x44 || b[2] !== 0x33) return tags;
+    const ver = b[3], size = (b[6] << 21) | (b[7] << 14) | (b[8] << 7) | b[9];
+    const want = { TIT2: "title", TPE1: "artist", TALB: "album", TYER: "year", TDRC: "year", TCON: "genre", TCOM: "composer", USLT: "lyrics", TT2: "title", TP1: "artist", TAL: "album", TYE: "year", TCO: "genre" };
+    let p = 10;
+    const dec = (enc, bytes) => { try { return new TextDecoder(enc === 1 ? "utf-16" : enc === 2 ? "utf-16be" : enc === 3 ? "utf-8" : "latin1").decode(bytes).replace(/\0/g, " ").trim(); } catch { return ""; } };
+    while (p < size + 10 && p < b.length - 10) {
+      const v2 = ver === 2;
+      const idLen = v2 ? 3 : 4, hdr = v2 ? 6 : 10;
+      const fid = String.fromCharCode(...b.slice(p, p + idLen));
+      if (!/^[A-Z0-9]+$/.test(fid)) break;
+      const fs = v2 ? (b[p + 3] << 16) | (b[p + 4] << 8) | b[p + 5]
+        : ver === 4 ? (b[p + 4] << 21) | (b[p + 5] << 14) | (b[p + 6] << 7) | b[p + 7] : (b[p + 4] << 24) | (b[p + 5] << 16) | (b[p + 6] << 8) | b[p + 7];
+      const data = b.slice(p + hdr, p + hdr + fs);
+      if (want[fid] && data.length) {
+        const skip = fid === "USLT" ? 4 : 1;
+        let rest = data.slice(skip);
+        if (fid === "USLT") { const z = rest.indexOf(0); rest = rest.slice(z + (data[0] === 1 || data[0] === 2 ? 2 : 1)); }
+        const val = dec(data[0], rest);
+        if (val) tags[want[fid]] = val.replace(/^\((\d+)\)/, "").trim() || val;
+      }
+      p += hdr + fs;
+    }
+    return tags;
+  }
+  function duration(file) {
+    return new Promise((res) => {
+      let url; try { url = URL.createObjectURL(file); } catch { return res(null); }
+      const a = new Audio(); const done = (v) => { URL.revokeObjectURL(url); res(v); };
+      a.preload = "metadata"; a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : null); a.onerror = () => done(null);
+      setTimeout(() => done(null), 4000); a.src = url;
+    });
+  }
+  async function readAudio(file) {
+    const tags = id3(await file.slice(0, 2_000_000).arrayBuffer());
+    const secs = await duration(file);
+    const len = secs ? `${Math.floor(secs / 60)} minutes ${Math.round(secs % 60)} seconds` : null;
+    const title = tags.title || file.name.replace(/\.[^.]+$/, "");
+    const lines = [`Song: ${title}.`];
+    if (tags.artist) lines.push(`Artist: ${tags.artist}. "${title}" is by ${tags.artist}.`);
+    if (tags.album) lines.push(`Album: ${tags.album}.`);
+    if (tags.year) lines.push(`Year: ${tags.year}.`);
+    if (tags.genre) lines.push(`Genre: ${tags.genre}.`);
+    if (tags.composer) lines.push(`Composer: ${tags.composer}.`);
+    if (len) lines.push(`Length: ${len}.`);
+    lines.push(`File name: ${file.name}.`);
+    if (tags.lyrics) lines.push("Lyrics:\n" + tags.lyrics);
+    return { kind: "song", text: lines.join("\n"), name: tags.artist ? `${title} (${tags.artist})` : title,
+      stats: `I saved the song's details${tags.lyrics ? " and its lyrics" : ""}. I can't listen to the sound itself, only read what's written about it.`, noSmart: !tags.lyrics };
+  }
+  async function readText(file) {
+    let text = await file.text();
+    const e = ext(file);
+    if (e === "html" || e === "htm") text = new DOMParser().parseFromString(text, "text/html").body.textContent || "";
+    if (e === "rtf") text = text.replace(/\\par[d]?/g, "\n").replace(/\{\\[^{}]*\}|\\[a-z]+-?\d* ?|[{}]/gi, "");
+    const wordsN = (text.match(/\S+/g) || []).length;
+    return { kind: wordsN > 20000 ? "book" : "text file", text, stats: wordsN > 20000 ? `It's long, about ${Math.round(wordsN / 300)} pages of reading.` : "" };
+  }
+  async function readCsv(file) {
+    await loadLib("xlsx").catch(() => null);
+    if (window.XLSX) return readSheet(file);
+    return readText(file);
+  }
+  async function readFile(file, progress) {
+    const e = ext(file), t = file.type || "";
+    if (e === "pdf" || t === "application/pdf") return readPdf(file, progress);
+    if (["xlsx", "xls", "xlsm", "ods"].includes(e)) return readSheet(file);
+    if (["csv", "tsv"].includes(e)) return readCsv(file);
+    if (e === "docx") return readDocx(file);
+    if (e === "eml" || t === "message/rfc822") return readEmail(file);
+    if (t.startsWith("audio/") || ["mp3", "m4a", "wav", "flac", "ogg", "aac"].includes(e)) return readAudio(file);
+    if (e === "doc") throw new Error("Old .doc Word files aren't supported. Save it as .docx or PDF and try again.");
+    if (t.startsWith("video/")) throw new Error("Bell can't learn from videos yet. Take a photo with Look instead.");
+    if (file.size > 30_000_000) throw new Error("This file is too big. Try one under 30 MB.");
+    return readText(file);
+  }
+
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function cut(text) {
+    const parts = [];
+    for (let i = 0; i < text.length; ) {
+      let end = Math.min(text.length, i + CHUNK);
+      if (end < text.length) { const nl = text.lastIndexOf("\n", end); if (nl > i + CHUNK / 2) end = nl + 1; }
+      parts.push(text.slice(i, end)); i = end;
+    }
+    return parts;
+  }
+  async function learn(name, kind, text, size) {
+    text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    let note = "";
+    if (text.length > MAX_TEXT) { text = text.slice(0, MAX_TEXT); note = " It was very long, so I kept the first part."; }
+    const parts = cut(text);
+    const src = { id: newId(), name, kind, createdAt: Date.now(), size: size ?? text.length, parts: parts.length };
+    await store.put(src, parts);
+    return { src, text, note };
+  }
+  async function study(src, text, info) {
+    let said = quickStudy(info.kind, text, info.stats || "");
+    if (sample && !info.noSmart) {
+      try { const s = await studySummary(src.name, info.kind, text); if (s) { said = (info.stats ? info.stats + " " : "") + s; await store.setSummary(src.id, s); } } catch {}
+    } else if (info.noSmart) said = info.stats;
+    return said;
+  }
+
+  // ================= talking and listening: Android's own voice =================
+  const Plugins = window.Capacitor?.Plugins || {};
+  const TTS = Plugins.TextToSpeech, STT = Plugins.SpeechRecognition;
+  function speak(text) {
+    if (TTS) { TTS.stop().catch(() => {}).finally(() => TTS.speak({ text: text.slice(0, 3900), rate: 1.0, pitch: 1.05, category: "playback" }).catch(() => browserSpeak(text))); return; }
+    browserSpeak(text);
+  }
+  function browserSpeak(text) {
+    try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch {}
+  }
+  const canSpeak = () => !!TTS || "speechSynthesis" in window;
+
+  let listening = false;
+  async function listen() {
+    const perm = await STT.checkPermissions().catch(() => ({}));
+    if (perm.speechRecognition !== "granted") {
+      const asked = await STT.requestPermissions().catch(() => ({}));
+      if (asked.speechRecognition !== "granted") throw new Error("denied");
+    }
+    const r = await STT.start({ popup: true, partialResults: false, maxResults: 1, prompt: "Speak to Bell" });
+    return (r?.matches || [])[0] || "";
+  }
+  function wireMic(btn, target, onDone) {
+    btn.addEventListener("click", async () => {
+      if (listening) return;
+      listening = true;
+      try {
+        const said = await listen();
+        if (said) { target.value = (target.value ? target.value.replace(/\s*$/, " ") : "") + said; onDone?.(); }
+      } catch (e) {
+        if (e?.message === "denied") addMsg("bot", "I need permission to use the microphone. You can turn it on in your phone's Settings, under Apps, Bell, Permissions.");
+      } finally { listening = false; }
+    });
+  }
+
+  // ================= UI =================
+  const chat = $("chat");
+  const history = [];
+  function addMsg(who, text, src, img) {
+    const el = document.createElement("div");
+    el.className = "msg " + who;
+    if (img) { const i = document.createElement("img"); i.src = img; i.alt = "Photo you showed Bell"; el.append(i); }
+    el.append(document.createTextNode(text));
+    if (src) { const s = document.createElement("span"); s.className = "src"; s.textContent = src; el.append(s); }
+    if (who === "bot" && canSpeak() && !/^(Thinking|Looking)…$/.test(text)) {
+      const wrap = document.createElement("div"); wrap.className = "tools";
+      const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.textContent = "Read aloud";
+      b.addEventListener("click", () => speak(text)); wrap.append(b); el.append(wrap);
+    }
+    chat.append(el);
+    chat.scrollTop = chat.scrollHeight;
+    if (who !== "sys") history.push((who === "me" ? "User: " : "Bell: ") + text);
+    return el;
+  }
+  let autoSpeak = false;
+  async function ask(question) {
+    const hist = history.slice(-6).join("\n");
+    addMsg("me", question);
+    const thinking = addMsg("bot", "Thinking…"); history.pop();
+    let ans;
+    try { ans = sample && $("smart").checked && sources.length ? await smartAnswer(question, hist) : plainAnswer(question); }
+    catch { ans = plainAnswer(question); }
+    thinking.remove();
+    addMsg("bot", ans.text, ans.src);
+    if (autoSpeak) speak(ans.text);
+  }
+  $("ask-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = $("ask").value.trim(); if (!q) return;
+    $("ask").value = ""; ask(q);
+  });
+  $("ask").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("ask-form").requestSubmit(); } });
+
+  function setStatus(id, t, err) { $(id).textContent = t; $(id).classList.toggle("err", !!err); }
+  $("save").addEventListener("click", async () => {
+    const body = $("note-body").value.trim();
+    if (!body) { setStatus("teach-status", "Write something first, then save it.", true); return; }
+    const name = $("note-title").value.trim() || body.split(/\s+/).slice(0, 6).join(" ");
+    try {
+      await learn(name, "note", body);
+      $("note-title").value = ""; $("note-body").value = "";
+      setStatus("teach-status", "Saved. Bell learned it.");
+    } catch (e) { setStatus("teach-status", e.message === "full" ? "This phone's storage for Bell is full. Forget some old things and try again." : "That didn't save. Check your connection and try again.", true); }
+  });
+
+  // ================= seeing: photos from the camera =================
+  let canSee = false;
+  function thumbnail(file, size = 360) {
+    return new Promise((res) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, size / Math.max(im.width, im.height));
+        const c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        res(c.toDataURL("image/jpeg", 0.7));
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); res(null); };
+      im.src = url;
+    });
+  }
+  async function see(file, question) {
+    const thumb = await thumbnail(file);
+    addMsg("me", question || "Look at this.", null, thumb);
+    if (!canSee) {
+      addMsg("bot", "I can't understand photos in this version of the app. Tell me about it in words instead, and I'll remember.");
+      return false;
+    }
+    const thinking = addMsg("bot", "Looking…"); history.pop();
+    try {
+      const when = new Date().toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+      const r = await sample.json(PERSONA + "The user pointed their phone camera at something and wants you to see it and remember it. " +
+        "Study the photo. Return JSON with: title (3 to 6 words naming what it shows), description (a detailed plain-text description you can later answer questions from: " +
+        "the main things and people, their colors, sizes and positions, any written text, numbers, brands or labels exactly as shown, and the place or setting), " +
+        "reply (2 to 3 friendly sentences spoken to the user saying what you see" + (question ? ", answering their question: " + JSON.stringify(question) : "") + ").",
+        { images: file, modelTier: "default", cache: false });
+      const title = String(r.title || "Something I saw").slice(0, 80), desc = String(r.description || ""), reply = String(r.reply || desc);
+      const src = { id: newId(), name: `${title} (${when})`, kind: "photo", createdAt: Date.now(), size: file.size, parts: 1, summary: reply };
+      await store.put(src, ["Photo taken " + when + ". " + desc]);
+      thinking.remove();
+      addMsg("bot", reply, "Saved to my memory as \"" + title + "\"");
+      if (autoSpeak) speak(reply);
+      return true;
+    } catch (e) {
+      thinking.remove();
+      addMsg("bot", e?.code === "rate_limited" ? "I've looked at a lot just now. Give me a minute, then try again." :
+        e?.code === "image_rejected" ? "I couldn't open that picture. Try taking it again." : "I couldn't look at that photo. Check your connection and try again.");
+      return false;
+    }
+  }
+  $("cam").addEventListener("change", (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    const q = $("ask").value.trim(); $("ask").value = "";
+    see(f, q);
+  });
+
+  let busy = false;
+  async function ingest(files) {
+    if (busy) return; busy = true;
+    const bar = $("prog"), fill = bar.firstElementChild;
+    let ok = 0;
+    for (const [n, file] of [...files].entries()) {
+      const label = files.length > 1 ? ` (${n + 1} of ${files.length})` : "";
+      bar.hidden = false; fill.style.width = "5%";
+      setStatus("file-status", `Reading ${file.name}${label}…`);
+      if ((file.type || "").startsWith("image/")) { if (await see(file, "")) ok++; continue; }
+      try {
+        const info = await readFile(file, (f, msg) => { fill.style.width = Math.max(5, f * 85) + "%"; setStatus("file-status", `${msg}${label}…`); });
+        if (!info.text || !info.text.trim()) throw new Error("I couldn't find any text in this file.");
+        const name = info.name || file.name.replace(/\.[^.]+$/, "");
+        setStatus("file-status", `Saving ${name}${label}…`); fill.style.width = "90%";
+        const { src, text, note } = await learn(name, info.kind, info.text, file.size);
+        setStatus("file-status", `Studying ${name}${label}…`);
+        const said = await study(src, text, info);
+        fill.style.width = "100%";
+        addMsg("bot", `I read your ${info.kind} "${name}".${note} ${said}`.replace(/\s+$/, ""), "Ask me anything about it.");
+        ok++;
+      } catch (e) {
+        const msg = e?.message === "lib" ? "I couldn't load the reader for this file type. Check your internet connection and try again."
+          : e?.message === "full" ? "This phone's storage for Bell is full. Forget some old things and try again."
+          : e?.message && e.message.length > 20 ? e.message : "I couldn't read this file.";
+        addMsg("bot", `I couldn't learn "${file.name}". ${msg}`);
+      }
+    }
+    bar.hidden = true; busy = false;
+    setStatus("file-status", ok ? `Learned ${ok} file${ok > 1 ? "s" : ""}. Bell told you about ${ok > 1 ? "them" : "it"} in Talk.` : "Nothing was learned. See Talk for why.", !ok);
+    if (ok) setTimeout(() => show("talk"), 900);
+  }
+  $("file").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; if (f.length) ingest(f); });
+  const drop = $("drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files.length) ingest(e.dataTransfer.files); });
+
+  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+  function show(view) {
+    document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === view)));
+    for (const v of ["talk", "teach", "memory"]) $("view-" + v).hidden = v !== view;
+  }
+
+  $("search").addEventListener("input", renderList);
+  const fmtSize = (n) => n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? Math.round(n / 1e3) + " KB" : n + " characters";
+  function preview(src) {
+    if (src.summary) return src.summary;
+    const c = chunks.find((c) => c.sourceId === src.id && c.idx === 0);
+    const t = c ? c.text : "";
+    return t.length > 300 ? t.slice(0, 300) + "…" : t;
+  }
+  function fullText(src) { return chunks.filter((c) => c.sourceId === src.id).sort((a, b) => a.idx - b.idx).map((c) => c.text).join(""); }
+  function renderList() {
+    const list = $("list");
+    list.replaceChildren();
+    const q = $("search").value.trim();
+    let shown = sources.slice().sort((a, b) => b.createdAt - a.createdAt);
+    if (q) {
+      const ids = new Set(search(q, 200).map((h) => h.s.src.id)), lower = q.toLowerCase();
+      shown = shown.filter((s) => ids.has(s.id) || s.name.toLowerCase().includes(lower));
+    }
+    if (!shown.length) {
+      const p = document.createElement("p"); p.className = "empty";
+      p.textContent = q ? "Nothing in Bell's memory matches that." : "Bell's memory is empty. Give her a file or tell her something in Teach.";
+      list.append(p); return;
+    }
+    for (const s of shown) {
+      const c = document.createElement("article"); c.className = "card";
+      const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = s.kind;
+      const h = document.createElement("h3"); h.textContent = s.name;
+      const p = document.createElement("p"); p.textContent = preview(s);
+      const meta = document.createElement("div"); meta.className = "meta";
+      const d = document.createElement("span");
+      d.textContent = new Date(s.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + (s.kind !== "note" && s.size ? " · " + fmtSize(s.size) : "");
+      const acts = document.createElement("div"); acts.className = "actions";
+      if (canSpeak()) {
+        const r = document.createElement("button"); r.className = "btn ghost small"; r.textContent = "Read aloud";
+        r.addEventListener("click", () => speak(s.name + ". " + (s.summary || fullText(s).slice(0, 2000)))); acts.append(r);
+      }
+      const del = document.createElement("button"); del.className = "btn ghost small"; del.textContent = "Forget";
+      del.addEventListener("click", () => {
+        if (del.dataset.armed) { del.disabled = true; store.remove(s.id).catch(() => { del.disabled = false; }); return; }
+        del.dataset.armed = "1"; del.textContent = "Tap again to forget";
+        setTimeout(() => { delete del.dataset.armed; del.textContent = "Forget"; }, 3000);
+      });
+      acts.append(del);
+      meta.append(d, acts);
+      c.append(tag, h, p, meta);
+      list.append(c);
+    }
+  }
+  let renderTimer = null;
+  function changed() {
+    index = null;
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => {
+      $("count").textContent = !sources.length ? "Nothing learned yet" : sources.length === 1 ? "Knows 1 thing" : `Knows ${sources.length} things`;
+      renderList();
+    }, 50);
+  }
+
+  // ================= start =================
+  $("cam-btn").hidden = true;
+  (async () => {
+    try { await loadAll(); } catch { addMsg("bot", "I couldn't open my memory on this phone. Try closing and reopening the app."); }
+    changed();
+    addMsg("bot", sources.length
+      ? `Hi, I'm Bell. I remember ${sources.length} thing${sources.length > 1 ? "s" : ""} you taught me. Ask me anything about them.`
+      : "Hi, I'm Bell. Give me a PDF, a spreadsheet, an email, a book or a song in the Teach tab, or just tell me something. I'll study it and you can ask me about it here.");
+    history.length = 0;
+    if (STT) {
+      const ok = await STT.available().then((r) => r.available).catch(() => false);
+      if (ok) {
+        $("ask-mic").hidden = false; $("teach-mic").hidden = false;
+        wireMic($("ask-mic"), $("ask"), () => { const q = $("ask").value.trim(); if (q) { $("ask").value = ""; autoSpeak = true; ask(q).finally(() => { autoSpeak = false; }); } });
+        wireMic($("teach-mic"), $("note-body"));
+      }
+    }
+  })();
+})();
+</script>
+
+</body>
+</html>
