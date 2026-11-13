@@ -84,6 +84,7 @@ details.install { background: var(--surface); border: 1px solid var(--line); bor
 details.install summary { cursor: pointer; font-weight: 600; }
 details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: in 0.18s ease-out; } @keyframes in { from { transform: translateY(4px); opacity: 0.4; } } }
+#stop-reading { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 50; border-radius: 999px; padding-inline: 20px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
 </style>
 <link rel="stylesheet" href="bell-theme.css">
 </head>
@@ -575,24 +576,51 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     el.textContent = pos >= 0 ? `Voice ${pos + 1} of ${voice.list.length} (${voice.list[pos].lang})` : "Phone's default voice";
     $("voice-pitch").value = voice.pitch;
   }
-  function speak(text) {
+  // reading aloud: every "Read aloud" button turns into "Stop" while Bell talks,
+  // and a "Stop reading" button floats on screen until she finishes
+  let speakingBtn = null, speakSeq = 0;
+  function markSpeaking(btn, on) {
+    if (speakingBtn) { speakingBtn.textContent = "Read aloud"; speakingBtn.removeAttribute("aria-pressed"); }
+    speakingBtn = btn || null;
+    if (btn) { btn.textContent = "Stop"; btn.setAttribute("aria-pressed", "true"); }
+    const bar = $("stop-reading"); if (bar) bar.hidden = !on;
+  }
+  function stopSpeaking() {
+    speakSeq++; markSpeaking(null, false);
+    if (TTS) TTS.stop().catch(() => {});
+    try { speechSynthesis.cancel(); } catch {}
+  }
+  function speak(text, btn) {
+    const seq = ++speakSeq;
+    markSpeaking(btn, true);
+    const done = () => { if (seq === speakSeq) markSpeaking(null, false); };
     if (TTS) {
       const opts = { text: text.slice(0, 3900), lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
       if (voice.index >= 0) opts.voice = voice.index;
-      TTS.stop().catch(() => {}).finally(() => TTS.speak(opts).catch(() => browserSpeak(text)));
+      TTS.stop().catch(() => {}).finally(() => {
+        if (seq !== speakSeq) return;
+        TTS.speak(opts).then(done, () => { if (seq === speakSeq) browserSpeak(text, done); });
+      });
       return;
     }
-    browserSpeak(text);
+    browserSpeak(text, done);
   }
-  function browserSpeak(text) {
+  function browserSpeak(text, done) {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
       if (vs[0]) u.voice = vs[0];
       u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
+      if (done) { u.onend = done; u.onerror = done; }
       speechSynthesis.speak(u);
-    } catch {}
+    } catch { done?.(); }
+  }
+  document.addEventListener("click", (e) => { if (e.target.closest?.("#stop-reading")) stopSpeaking(); });
+  function readButton(getText) {
+    const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.textContent = "Read aloud";
+    b.addEventListener("click", () => (speakingBtn === b ? stopSpeaking() : speak(getText(), b)));
+    return b;
   }
   const canSpeak = () => !!TTS || "speechSynthesis" in window;
 
@@ -630,8 +658,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     if (src) { const s = document.createElement("span"); s.className = "src"; s.textContent = src; el.append(s); }
     if (who === "bot" && canSpeak() && !/^(Thinking|Looking)…$/.test(text)) {
       const wrap = document.createElement("div"); wrap.className = "tools";
-      const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.textContent = "Read aloud";
-      b.addEventListener("click", () => speak(text)); wrap.append(b); el.append(wrap);
+      wrap.append(readButton(() => text)); el.append(wrap);
     }
     chat.append(el);
     chat.scrollTop = chat.scrollHeight;
@@ -798,8 +825,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       d.textContent = new Date(s.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + (s.kind !== "note" && s.size ? " · " + fmtSize(s.size) : "");
       const acts = document.createElement("div"); acts.className = "actions";
       if (canSpeak()) {
-        const r = document.createElement("button"); r.className = "btn ghost small"; r.textContent = "Read aloud";
-        r.addEventListener("click", () => speak(s.name + ". " + (s.summary || fullText(s).slice(0, 2000)))); acts.append(r);
+        acts.append(readButton(() => s.name + ". " + (s.summary || fullText(s).slice(0, 2000))));
       }
       const del = document.createElement("button"); del.className = "btn ghost small"; del.textContent = "Forget";
       del.addEventListener("click", () => {
@@ -913,5 +939,6 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 })();
 </script>
 
+<button type="button" id="stop-reading" class="btn" hidden>■ Stop reading</button>
 </body>
 </html>
