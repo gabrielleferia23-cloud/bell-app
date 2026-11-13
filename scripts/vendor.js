@@ -8,6 +8,7 @@ const files = {
   "pdf.worker.min.js": "pdfjs-dist/build/pdf.worker.min.js",
   "xlsx.full.min.js": "xlsx/dist/xlsx.full.min.js",
   "mammoth.browser.min.js": "mammoth/mammoth.browser.min.js",
+  "jszip.min.js": "jszip/dist/jszip.min.js",
 };
 for (const [name, from] of Object.entries(files)) {
   fs.copyFileSync(require.resolve(from), path.join(out, name));
