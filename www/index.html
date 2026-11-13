@@ -122,7 +122,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       <div class="scroll">
         <div class="drop" id="drop">
           <h2>Give Bell a file</h2>
-          <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span></div>
+          <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span><span class="kind">Scans and photos of pages</span></div>
           <label class="btn" for="file">Choose files</label>
           <input type="file" id="file" multiple hidden>
           <div class="progress" id="prog" hidden><div></div></div>
@@ -311,20 +311,64 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   }
   const ext = (f) => (f.name.match(/\.([^.]+)$/) || [, ""])[1].toLowerCase();
 
+  // reading words in pictures (scanned pages), done on the phone by BellEyes
+  const Eyes = () => window.Capacitor?.Plugins?.BellEyes;
+  const NO_WORDS = "I couldn't find any words in it. If it's a scan or photo of a page, make sure it's sharp, bright and the right way up.";
+  async function readCanvas(c) {
+    const E = Eyes(); if (!E) throw new Error("This looks like a scanned file. Install the latest Bell app to read scans.");
+    try { const r = await E.readText({ image: c.toDataURL("image/jpeg", 0.85) }); return String(r.text || "").trim(); }
+    finally { c.width = c.height = 0; }
+  }
+  function imageCanvas(file, max = 2400) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, max / Math.max(im.width, im.height));
+        const c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url); res(c);
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("I couldn't open this picture. Try saving it as JPG or PNG.")); };
+      im.src = url;
+    });
+  }
+  async function readScan(file, progress) {
+    progress(0.3, "Reading the words in the picture");
+    const text = await readCanvas(await imageCanvas(file));
+    if (text.replace(/\s/g, "").length < 10) throw new Error(NO_WORDS);
+    return { kind: "scanned page", text, stats: "" };
+  }
   async function readPdf(file, progress) {
     await loadLib("pdf");
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
     const pages = [];
+    let scanned = 0;
     for (let p = 1; p <= pdf.numPages; p++) {
-      const content = await (await pdf.getPage(p)).getTextContent();
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
       let line = "";
       for (const it of content.items) { line += it.str; line += it.hasEOL ? "\n" : (it.str && !it.str.endsWith(" ") ? " " : ""); }
-      pages.push(line.replace(/[ \t]+/g, " ").trim());
+      line = line.replace(/[ \t]+/g, " ").trim();
+      if (line.replace(/\s/g, "").length < 30) {
+        // no real text layer: this page is a picture, so read the words in it
+        progress((p - 0.5) / pdf.numPages, `Reading scanned page ${p} of ${pdf.numPages}`);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(3, 2000 / Math.max(base.width, base.height) * 1.4) });
+        const c = document.createElement("canvas"); c.width = Math.round(viewport.width); c.height = Math.round(viewport.height);
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: g, viewport }).promise;
+        const seen = await readCanvas(c);
+        if (seen.length > line.length) { line = seen; scanned++; }
+      }
+      page.cleanup();
+      pages.push(line);
       progress(p / pdf.numPages, `Reading page ${p} of ${pdf.numPages}`);
     }
-    const text = pages.join("\n\n");
-    if (!text.trim()) throw new Error("This PDF has no readable text. It's probably scanned pictures of pages, which Bell can't read yet.");
-    return { kind: "PDF", text, stats: `It has ${pdf.numPages} page${pdf.numPages > 1 ? "s" : ""}.` };
+    const text = pages.filter(Boolean).join("\n\n");
+    if (text.replace(/\s/g, "").length < 10) throw new Error(NO_WORDS);
+    const n = pdf.numPages;
+    return { kind: scanned * 2 >= n ? "scanned PDF" : "PDF", text,
+      stats: `It has ${n} page${n > 1 ? "s" : ""}` + (scanned ? `, and I read ${n === 1 ? "it" : scanned === n ? "all of them" : scanned + " of them"} from the scanned picture${n === 1 ? "" : "s"}.` : ".") };
   }
   async function readSheet(file) {
     await loadLib("xlsx");
@@ -456,6 +500,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   async function readFile(file, progress) {
     const e = ext(file), t = file.type || "";
     if (e === "pdf" || t === "application/pdf") return readPdf(file, progress);
+    if (t.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif"].includes(e)) return readScan(file, progress);
     if (["xlsx", "xls", "xlsm", "ods"].includes(e)) return readSheet(file);
     if (["csv", "tsv"].includes(e)) return readCsv(file);
     if (e === "docx") return readDocx(file);
@@ -685,7 +730,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       const label = files.length > 1 ? ` (${n + 1} of ${files.length})` : "";
       bar.hidden = false; fill.style.width = "5%";
       setStatus("file-status", `Reading ${file.name}${label}…`);
-      if ((file.type || "").startsWith("image/")) { if (await see(file, "")) ok++; continue; }
+      if ((file.type || "").startsWith("image/") && !Eyes()) { if (await see(file, "")) ok++; continue; }
       try {
         const info = await readFile(file, (f, msg) => { fill.style.width = Math.max(5, f * 85) + "%"; setStatus("file-status", `${msg}${label}…`); });
         if (!info.text || !info.text.trim()) throw new Error("I couldn't find any text in this file.");
