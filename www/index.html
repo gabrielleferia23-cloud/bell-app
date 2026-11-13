@@ -124,7 +124,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
           <h2>Give Bell a file</h2>
           <div class="kinds"><span class="kind">PDF</span><span class="kind">Excel</span><span class="kind">CSV</span><span class="kind">Word</span><span class="kind">Email (.eml)</span><span class="kind">Books (.txt, .pdf)</span><span class="kind">Music</span><span class="kind">Text and notes</span></div>
           <label class="btn" for="file">Choose files</label>
-          <input type="file" id="file" multiple hidden accept=".pdf,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.docx,.eml,.txt,.md,.json,.html,.htm,.xml,.rtf,.log,.mp3,.m4a,.wav,.flac,.ogg,.aac,audio/*,text/*,image/*">
+          <input type="file" id="file" multiple hidden>
           <div class="progress" id="prog" hidden><div></div></div>
           <p class="status" id="file-status"></p>
         </div>
@@ -771,11 +771,10 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   let renderTimer = null;
   function changed() {
     index = null;
+    const setCount = () => { $("count").textContent = !sources.length ? "Nothing learned yet" : sources.length === 1 ? "Knows 1 thing" : `Knows ${sources.length} things`; };
+    setCount();
     clearTimeout(renderTimer);
-    renderTimer = setTimeout(() => {
-      $("count").textContent = !sources.length ? "Nothing learned yet" : sources.length === 1 ? "Knows 1 thing" : `Knows ${sources.length} things`;
-      renderList();
-    }, 50);
+    renderTimer = setTimeout(() => { setCount(); renderList(); }, 50);
   }
 
   // ================= Bell's AI brain (runs on the phone) =================
