@@ -104,11 +104,16 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     <section id="view-talk">
       <div class="drop" id="brain-card" hidden>
         <h2>Give Bell her AI brain</h2>
-        <p class="hint" id="brain-text">With it, Bell can chat with you, explain things and answer in her own words. It runs only on this phone, it's free, and it works offline. It's a one-time download of about 930 MB, so use Wi-Fi.</p>
+        <p class="hint" id="brain-text">With it, Bell can chat with you, explain things and answer in her own words. It runs only on this phone, it's free, and it works offline. It's a one-time download of about 3.7 GB, so use Wi-Fi.</p>
         <div class="actions"><button class="btn" id="brain-get">Download brain</button><button class="btn ghost" id="brain-stop" hidden>Pause</button></div>
         <div class="progress" id="brain-prog" hidden><div></div></div>
       </div>
       <div class="scroll" id="chat" aria-live="polite"></div>
+      <div class="drop" id="brain-up" hidden>
+        <h2>Make Bell smarter</h2>
+        <p class="hint">A bigger, free brain (Gemma 4) that understands your files much better and explains them more clearly. It still runs only on this phone. One-time download of about 3.7 GB, so use Wi-Fi. Bell keeps working while it downloads.</p>
+        <div class="actions"><button class="btn" id="brain-up-btn">Get the smarter brain</button></div>
+      </div>
       <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
@@ -141,7 +146,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
           <h3>Bell's voice</h3>
           <p class="hint" id="voice-name">Phone's default voice</p>
           <label class="hint" for="voice-pitch">Older ← → Younger</label>
-          <input type="range" id="voice-pitch" min="0.9" max="1.7" step="0.05" value="1.35">
+          <input type="range" id="voice-pitch" min="0.9" max="1.4" step="0.05" value="1.1">
           <div class="actions">
             <button class="btn" id="voice-test">Hear Bell</button>
             <button class="btn ghost" id="voice-next">Try another voice</button>
@@ -276,21 +281,25 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   const PERSONA = "You are Bell, a warm, friendly personal assistant. You remember what the user teaches you. ";
   async function smartAnswer(question, history, onText) {
     if (!index) buildIndex();
-    const hits = search(question, 14);
+    const B = BRAINS[brainKind] || BRAINS.quick;
+    const hits = search(question, B.hits);
     const seen = new Set(), parts = [];
     for (const h of hits) { const t = h.s.isSummary ? h.s.text : around(h.i); if (seen.has(t)) continue; seen.add(t); parts.push(`(${h.s.src.name}) ${t}`); }
     const catalog = sources.slice(-20).map((s) => `- ${s.name} [${s.kind}]${s.summary ? ": " + s.summary.slice(0, 150) : ""}`).join("\n");
     const prompt = "Reply to the user's message. If it's about things they taught you, answer from the notes below and stay faithful to them. " +
+      "Read the notes carefully and really work out what they mean: connect facts from different notes, explain things simply, and when asked, summarize, compare, count or add up numbers from them. " +
+      "If the notes don't contain the answer, say so honestly instead of guessing. " +
       "If it's small talk or a general question, chat naturally, and say so if you're answering from general knowledge rather than their notes. " +
       "Keep it short and conversational, plain text, no markdown.\n\nTHINGS YOU HAVE LEARNED:\n" + (catalog || "(nothing yet)") +
-      "\n\nRELEVANT NOTES:\n" + (parts.join("\n").slice(0, 5000) || "(none found)") +
+      "\n\nRELEVANT NOTES:\n" + (parts.join("\n").slice(0, B.notes) || "(none found)") +
       (history ? "\n\nRECENT CONVERSATION:\n" + history.slice(-1200) : "") + "\n\nUSER: " + question;
     const r = await sample(prompt, { onText });
     return { text: r.text.trim(), src: hits.length ? "From: " + [...new Set(hits.slice(0, 4).map((h) => h.s.src.name))].join(", ") : "" };
   }
   async function studySummary(name, kind, text) {
     const n = text.length;
-    const excerpt = n > 6000 ? text.slice(0, 3500) + "\n…\n" + text.slice(Math.floor(n / 2), Math.floor(n / 2) + 1200) + "\n…\n" + text.slice(-1200) : text;
+    const k = brainKind === "smart" ? 2 : 1;
+    const excerpt = n > 6000 * k ? text.slice(0, 3500 * k) + "\n…\n" + text.slice(Math.floor(n / 2), Math.floor(n / 2) + 1200 * k) + "\n…\n" + text.slice(-1200 * k) : text;
     const r = await sample(`The user just gave you a ${kind} called "${name}". Study it, then tell them in 2 to 4 friendly sentences what it is and the main things you learned from it, ` +
       "so they know you understood it. Plain text, no markdown, no preamble.\n\nCONTENT:\n" + excerpt, {});
     return r.text.trim();
@@ -545,9 +554,11 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   const TTS = Plugins.TextToSpeech, STT = Plugins.SpeechRecognition;
   // Bell's voice: a fluent English girl's voice, picked from the voices on the phone.
   const VOICE_KEY = "bell.voice.v1";
-  const voice = { list: [], index: -1, pitch: 1.35, rate: 1.0 };
+  const voice = { list: [], index: -1, pitch: 1.1, rate: 0.95 };
   try { Object.assign(voice, JSON.parse(localStorage.getItem(VOICE_KEY) || "{}")); voice.list = []; } catch {}
-  const saveVoice = () => { try { localStorage.setItem(VOICE_KEY, JSON.stringify({ name: voice.name, pitch: voice.pitch, rate: voice.rate })); } catch {} };
+  // the first version pushed the pitch to 1.35, which made her sound strange; bring it back to natural
+  if (!voice.v2) { voice.pitch = Math.min(voice.pitch, 1.1); voice.rate = 0.95; voice.v2 = true; }
+  const saveVoice = () => { try { localStorage.setItem(VOICE_KEY, JSON.stringify({ name: voice.name, pitch: voice.pitch, rate: voice.rate, v2: true })); } catch {} };
   function voiceScore(v) {
     const n = (v.name + " " + v.voiceURI).toLowerCase(), lang = (v.lang || "").toLowerCase().replace("_", "-");
     if (!lang.startsWith("en")) return -1;
@@ -590,31 +601,46 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     if (TTS) TTS.stop().catch(() => {});
     try { speechSynthesis.cancel(); } catch {}
   }
+  // the phone's voice takes about 4,000 letters at a time, so long texts are read piece by piece
+  function pieces(text) {
+    const out = []; let t = String(text).trim();
+    while (t.length > 3500) {
+      let cut = Math.max(t.lastIndexOf(". ", 3500), t.lastIndexOf("\n", 3500));
+      if (cut < 1500) cut = t.lastIndexOf(" ", 3500);
+      if (cut < 1) cut = 3500;
+      out.push(t.slice(0, cut + 1)); t = t.slice(cut + 1).trim();
+    }
+    if (t) out.push(t);
+    return out;
+  }
   function speak(text, btn) {
     const seq = ++speakSeq;
     markSpeaking(btn, true);
-    const done = () => { if (seq === speakSeq) markSpeaking(null, false); };
-    if (TTS) {
-      const opts = { text: text.slice(0, 3900), lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
-      if (voice.index >= 0) opts.voice = voice.index;
-      TTS.stop().catch(() => {}).finally(() => {
+    (async () => {
+      if (TTS) await TTS.stop().catch(() => {});
+      for (const piece of pieces(text)) {
         if (seq !== speakSeq) return;
-        TTS.speak(opts).then(done, () => { if (seq === speakSeq) browserSpeak(text, done); });
-      });
-      return;
-    }
-    browserSpeak(text, done);
+        if (TTS) {
+          const opts = { text: piece, lang: voice.list.find((v) => v.i === voice.index)?.lang || "en-US", rate: voice.rate, pitch: voice.pitch, category: "playback" };
+          if (voice.index >= 0) opts.voice = voice.index;
+          try { await TTS.speak(opts); continue; } catch { if (seq !== speakSeq) return; }
+        }
+        await browserSpeak(piece);
+      }
+    })().finally(() => { if (seq === speakSeq) markSpeaking(null, false); });
   }
-  function browserSpeak(text, done) {
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
-      if (vs[0]) u.voice = vs[0];
-      u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
-      if (done) { u.onend = done; u.onerror = done; }
-      speechSynthesis.speak(u);
-    } catch { done?.(); }
+  function browserSpeak(text) {
+    return new Promise((done) => {
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        const vs = speechSynthesis.getVoices().filter((v) => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
+        if (vs[0]) u.voice = vs[0];
+        u.lang = vs[0]?.lang || "en-US"; u.pitch = Math.min(2, voice.pitch); u.rate = voice.rate;
+        u.onend = done; u.onerror = done;
+        speechSynthesis.speak(u);
+      } catch { done(); }
+    });
   }
   document.addEventListener("click", (e) => { if (e.target.closest?.("#stop-reading")) stopSpeaking(); });
   function readButton(getText) {
@@ -873,7 +899,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       d.textContent = new Date(s.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + (s.kind !== "note" && s.size ? " · " + fmtSize(s.size) : "");
       const acts = document.createElement("div"); acts.className = "actions";
       if (canSpeak()) {
-        acts.append(readButton(() => s.name + ". " + (s.summary || fullText(s).slice(0, 2000))));
+        acts.append(readButton(() => s.name + ". " + (s.kind === "photo" ? s.summary || fullText(s) : fullText(s))));
       }
       const del = document.createElement("button"); del.className = "btn ghost small"; del.textContent = "Forget";
       del.addEventListener("click", () => {
@@ -898,12 +924,18 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 
   // ================= Bell's AI brain (runs on the phone) =================
   const Brain = Plugins.BellBrain;
-  const MODEL_URL = "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm";
+  // two brains: the quick one (Qwen3 1.7B) and the smart one (Gemma 4 E4B), both free and on the phone
+  const BRAINS = {
+    quick: { url: "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm", size: "1 GB", noThink: true, notes: 5000, hits: 14 },
+    smart: { url: "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm", size: "3.7 GB", noThink: false, notes: 9000, hits: 24 },
+  };
+  let brainKind = "smart";
+  const brainOf = (bytes) => (bytes > 2e9 ? "smart" : "quick");
   let streamCb = null, streamText = "";
   const cleanThought = (t) => t.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").replace(/^\s+/, "");
   function brainSample(prompt, opts = {}) {
     streamText = ""; streamCb = opts.onText || null;
-    return Brain.generate({ prompt: prompt + " /no_think", system: PERSONA + "Always answer in the same language the user writes in." })
+    return Brain.generate({ prompt: prompt + (BRAINS[brainKind].noThink ? " /no_think" : ""), system: PERSONA + "Always answer in the same language the user writes in." })
       .then((r) => ({ text: cleanThought(r.text || streamText).trim() }))
       .finally(() => { streamCb = null; });
   }
@@ -916,23 +948,28 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       await Brain.load();
       sample = brainSample;
       $("brain-card").hidden = true; $("smart-wrap").hidden = false;
+      $("brain-up").hidden = brainKind === "smart";
       return true;
     } catch (e) {
       $("brain-text").textContent = "Bell's brain couldn't start on this phone (" + (e?.message || "unknown error") + "). She'll keep answering from her memory.";
       return false;
     }
   }
-  async function getBrain() {
+  async function getBrain(kind = "smart") {
+    const upgrading = !!sample;
+    $("brain-card").hidden = false; $("brain-up").hidden = true;
     $("brain-get").hidden = true; $("brain-stop").hidden = false; $("brain-prog").hidden = false;
-    $("brain-text").textContent = "Downloading Bell's brain. Keep the app open.";
+    $("brain-text").textContent = upgrading ? "Downloading Bell's smarter brain. She keeps using her old one until it's ready. Keep the app open." : "Downloading Bell's brain. Keep the app open.";
     try {
-      await Brain.download({ url: MODEL_URL });
+      await Brain.download({ url: BRAINS[kind].url });
+      brainKind = kind;
       await wakeBrain();
-      if (sample) addMsg("bot", "I have my brain now! I can chat with you and explain what you taught me in my own words. Try asking me something.");
+      if (sample) addMsg("bot", upgrading ? "I have my smarter brain now! I understand what you teach me much better. Try asking me something about it."
+        : "I have my brain now! I can chat with you and explain what you taught me in my own words. Try asking me something.");
     } catch (e) {
       const m = e?.message || "";
       $("brain-text").textContent = m === "cancelled" ? "Download paused. Tap Continue to carry on from where it stopped."
-        : m === "not_enough_space" ? "There isn't enough free space on the phone. Bell needs about 1.2 GB free."
+        : m === "not_enough_space" ? `There isn't enough free space on the phone. Bell needs about ${BRAINS[kind].size} free, plus a little extra.`
         : "The download stopped (" + m + "). Check your internet and tap Continue.";
       $("brain-get").textContent = "Continue"; $("brain-get").hidden = false; $("brain-stop").hidden = true;
     }
@@ -942,7 +979,8 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     Brain.addListener("downloadProgress", ({ received, total }) => {
       if (total > 0) { brainBar().style.width = Math.min(100, (received / total) * 100).toFixed(1) + "%"; $("brain-text").textContent = `Downloading Bell's brain: ${mb(received)} of ${mb(total)}. Keep the app open.`; }
     });
-    $("brain-get").addEventListener("click", getBrain);
+    $("brain-get").addEventListener("click", () => getBrain("smart"));
+    $("brain-up-btn").addEventListener("click", () => getBrain("smart"));
     $("brain-stop").addEventListener("click", () => Brain.cancelDownload());
   }
 
@@ -969,7 +1007,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     history.length = 0;
     if (Brain) {
       const st = await Brain.status().catch(() => null);
-      if (st?.downloaded) wakeBrain();
+      if (st?.downloaded) { brainKind = brainOf(st.modelBytes); wakeBrain(); }
       else if (st) {
         $("brain-card").hidden = false;
         if (st.partialBytes > 0) $("brain-get").textContent = "Continue download";
