@@ -100,8 +100,14 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   </nav>
   <main>
     <section id="view-talk">
+      <div class="drop" id="brain-card" hidden>
+        <h2>Give Bell her AI brain</h2>
+        <p class="hint" id="brain-text">With it, Bell can chat with you, explain things and answer in her own words. It runs only on this phone, it's free, and it works offline. It's a one-time download of about 930 MB, so use Wi-Fi.</p>
+        <div class="actions"><button class="btn" id="brain-get">Download brain</button><button class="btn ghost" id="brain-stop" hidden>Pause</button></div>
+        <div class="progress" id="brain-prog" hidden><div></div></div>
+      </div>
       <div class="scroll" id="chat" aria-live="polite"></div>
-      <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Smart replies (Bell writes answers in her own words, using only what you taught her)</label>
+      <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
         <label class="btn ghost" for="cam" id="cam-btn" title="Let Bell look through your camera">Look</label>
@@ -255,25 +261,26 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 
   // ================= Claude-powered extras (smart replies, study summaries) =================
   let sample = null;
-  const PERSONA = "You are Bell, a warm, friendly personal assistant who learns only from what the user gives her. ";
-  async function smartAnswer(question, history) {
+  const PERSONA = "You are Bell, a warm, friendly personal assistant. You remember what the user teaches you. ";
+  async function smartAnswer(question, history, onText) {
     if (!index) buildIndex();
     const hits = search(question, 14);
     const seen = new Set(), parts = [];
     for (const h of hits) { const t = h.s.isSummary ? h.s.text : around(h.i); if (seen.has(t)) continue; seen.add(t); parts.push(`(${h.s.src.name}) ${t}`); }
-    const catalog = sources.slice(-40).map((s) => `- ${s.name} [${s.kind}]${s.summary ? ": " + s.summary.slice(0, 300) : ""}`).join("\n");
-    const prompt = PERSONA + "Answer the user's question using ONLY the material below. If it doesn't contain the answer, say you haven't learned that yet and suggest they teach you. " +
+    const catalog = sources.slice(-20).map((s) => `- ${s.name} [${s.kind}]${s.summary ? ": " + s.summary.slice(0, 150) : ""}`).join("\n");
+    const prompt = "Reply to the user's message. If it's about things they taught you, answer from the notes below and stay faithful to them. " +
+      "If it's small talk or a general question, chat naturally, and say so if you're answering from general knowledge rather than their notes. " +
       "Keep it short and conversational, plain text, no markdown.\n\nTHINGS YOU HAVE LEARNED:\n" + (catalog || "(nothing yet)") +
-      "\n\nRELEVANT PASSAGES:\n" + (parts.join("\n").slice(0, 14000) || "(none found)") +
-      (history ? "\n\nRECENT CONVERSATION:\n" + history : "") + "\n\nQUESTION: " + question;
-    const r = await sample(prompt, { modelTier: "quick", cache: false });
+      "\n\nRELEVANT NOTES:\n" + (parts.join("\n").slice(0, 5000) || "(none found)") +
+      (history ? "\n\nRECENT CONVERSATION:\n" + history.slice(-1200) : "") + "\n\nUSER: " + question;
+    const r = await sample(prompt, { onText });
     return { text: r.text.trim(), src: hits.length ? "From: " + [...new Set(hits.slice(0, 4).map((h) => h.s.src.name))].join(", ") : "" };
   }
   async function studySummary(name, kind, text) {
     const n = text.length;
-    const excerpt = n > 12000 ? text.slice(0, 7000) + "\n…\n" + text.slice(Math.floor(n / 2), Math.floor(n / 2) + 2500) + "\n…\n" + text.slice(-2500) : text;
-    const r = await sample(PERSONA + `The user just gave you a ${kind} called "${name}". Study it, then tell them in 2 to 4 friendly sentences what it is and the main things you learned from it, ` +
-      "so they know you understood it. Plain text, no markdown, no preamble.\n\nCONTENT:\n" + excerpt, { modelTier: "quick", cache: false });
+    const excerpt = n > 6000 ? text.slice(0, 3500) + "\n…\n" + text.slice(Math.floor(n / 2), Math.floor(n / 2) + 1200) + "\n…\n" + text.slice(-1200) : text;
+    const r = await sample(`The user just gave you a ${kind} called "${name}". Study it, then tell them in 2 to 4 friendly sentences what it is and the main things you learned from it, ` +
+      "so they know you understood it. Plain text, no markdown, no preamble.\n\nCONTENT:\n" + excerpt, {});
     return r.text.trim();
   }
   function quickStudy(kind, text, stats) {
@@ -536,7 +543,8 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     addMsg("me", question);
     const thinking = addMsg("bot", "Thinking…"); history.pop();
     let ans;
-    try { ans = sample && $("smart").checked && sources.length ? await smartAnswer(question, hist) : plainAnswer(question); }
+    const onText = (t) => { thinking.firstChild.textContent = t || "Thinking…"; chat.scrollTop = chat.scrollHeight; };
+    try { ans = sample && $("smart").checked ? await smartAnswer(question, hist, onText) : plainAnswer(question); }
     catch { ans = plainAnswer(question); }
     thinking.remove();
     addMsg("bot", ans.text, ans.src);
@@ -714,6 +722,56 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     }, 50);
   }
 
+  // ================= Bell's AI brain (runs on the phone) =================
+  const Brain = Plugins.BellBrain;
+  const MODEL_URL = "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm";
+  let streamCb = null, streamText = "";
+  const cleanThought = (t) => t.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").replace(/^\s+/, "");
+  function brainSample(prompt, opts = {}) {
+    streamText = ""; streamCb = opts.onText || null;
+    return Brain.generate({ prompt: prompt + " /no_think", system: PERSONA + "Always answer in the same language the user writes in." })
+      .then((r) => ({ text: cleanThought(r.text || streamText).trim() }))
+      .finally(() => { streamCb = null; });
+  }
+  const brainBar = () => $("brain-prog").firstElementChild;
+  const mb = (n) => Math.round(n / 1e6).toLocaleString() + " MB";
+  async function wakeBrain() {
+    $("brain-card").hidden = false; $("brain-get").hidden = true; $("brain-stop").hidden = true; $("brain-prog").hidden = true;
+    $("brain-text").textContent = "Waking Bell's brain up. This takes a few seconds the first time.";
+    try {
+      await Brain.load();
+      sample = brainSample;
+      $("brain-card").hidden = true; $("smart-wrap").hidden = false;
+      return true;
+    } catch (e) {
+      $("brain-text").textContent = "Bell's brain couldn't start on this phone (" + (e?.message || "unknown error") + "). She'll keep answering from her memory.";
+      return false;
+    }
+  }
+  async function getBrain() {
+    $("brain-get").hidden = true; $("brain-stop").hidden = false; $("brain-prog").hidden = false;
+    $("brain-text").textContent = "Downloading Bell's brain. Keep the app open.";
+    try {
+      await Brain.download({ url: MODEL_URL });
+      await wakeBrain();
+      if (sample) addMsg("bot", "I have my brain now! I can chat with you and explain what you taught me in my own words. Try asking me something.");
+    } catch (e) {
+      const m = e?.message || "";
+      $("brain-text").textContent = m === "cancelled" ? "Download paused. Tap Continue to carry on from where it stopped."
+        : m === "not_enough_space" ? "There isn't enough free space on the phone. Bell needs about 1.2 GB free."
+        : "The download stopped (" + m + "). Check your internet and tap Continue.";
+      $("brain-get").textContent = "Continue"; $("brain-get").hidden = false; $("brain-stop").hidden = true;
+    }
+  }
+  if (Brain) {
+    Brain.addListener("token", ({ text }) => { streamText += text; streamCb?.(cleanThought(streamText)); });
+    Brain.addListener("downloadProgress", ({ received, total }) => {
+      if (total > 0) { brainBar().style.width = Math.min(100, (received / total) * 100).toFixed(1) + "%"; $("brain-text").textContent = `Downloading Bell's brain: ${mb(received)} of ${mb(total)}. Keep the app open.`; }
+    });
+    $("brain-get").addEventListener("click", getBrain);
+    $("brain-stop").addEventListener("click", () => Brain.cancelDownload());
+  }
+
   // ================= start =================
   $("cam-btn").hidden = true;
   (async () => {
@@ -723,6 +781,14 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       ? `Hi, I'm Bell. I remember ${sources.length} thing${sources.length > 1 ? "s" : ""} you taught me. Ask me anything about them.`
       : "Hi, I'm Bell. Give me a PDF, a spreadsheet, an email, a book or a song in the Teach tab, or just tell me something. I'll study it and you can ask me about it here.");
     history.length = 0;
+    if (Brain) {
+      const st = await Brain.status().catch(() => null);
+      if (st?.downloaded) wakeBrain();
+      else if (st) {
+        $("brain-card").hidden = false;
+        if (st.partialBytes > 0) $("brain-get").textContent = "Continue download";
+      }
+    }
     if (STT) {
       const ok = await STT.available().then((r) => r.available).catch(() => false);
       if (ok) {
