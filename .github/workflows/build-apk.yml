@@ -3,6 +3,7 @@ name: Build Bell APK
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -30,6 +31,12 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Show which AI engine version Gradle picks
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:dependencyInsight --configuration releaseRuntimeClasspath --dependency litertlm-android --no-daemon -q | head -20 || true
 
       - name: Build the APK
         id: build
@@ -67,14 +74,14 @@ jobs:
           fi
 
       - name: Keep the test build
-        if: steps.build.outputs.signed == 'false'
+        if: steps.build.outputs.signed == 'false' || github.ref != 'refs/heads/main'
         uses: actions/upload-artifact@v5
         with:
           name: Bell-test-apk
-          path: Bell-test.apk
+          path: Bell-*.apk
 
       - name: Publish the APK as a release
-        if: steps.build.outputs.signed == 'true'
+        if: steps.build.outputs.signed == 'true' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
