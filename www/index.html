@@ -117,10 +117,10 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
-        <label class="btn ghost" for="cam" id="cam-btn" title="Let Bell look through your camera">Look</label>
+        <label class="btn ghost icon-btn" for="cam" id="cam-btn" title="Let Bell look through your camera" aria-label="Look with the camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></label>
         <input type="file" id="cam" accept="image/*" capture="environment" hidden>
-        <button type="button" class="btn ghost" id="ask-mic" hidden aria-pressed="false" title="Speak to Bell">Mic</button>
-        <button class="btn" id="ask-send">Ask</button>
+        <button type="button" class="btn ghost icon-btn" id="ask-mic" hidden aria-pressed="false" title="Speak to Bell" aria-label="Speak to Bell"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button>
+        <button class="btn orb" id="ask-send" title="Ask Bell" aria-label="Ask Bell"><span class="orb-core"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></span></button>
       </form>
     </section>
 
