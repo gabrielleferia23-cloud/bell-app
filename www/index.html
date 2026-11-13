@@ -713,6 +713,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     });
   }
   async function see(file, question) {
+    if (Eyes()) return seeOnPhone(file, question);
     const thumb = await thumbnail(file);
     addMsg("me", question || "Look at this.", null, thumb);
     if (!canSee) {
@@ -741,6 +742,53 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       return false;
     }
   }
+  // seeing on the phone itself: names the things in the photo and reads any words,
+  // then saves only that understanding. The photo itself is not kept.
+  const listWords = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  async function seeOnPhone(file, question) {
+    const thumb = await thumbnail(file);
+    addMsg("me", question || "Look at this.", null, thumb);
+    const thinking = addMsg("bot", "Looking…"); history.pop();
+    try {
+      const c = await imageCanvas(file, 1600);
+      let r;
+      try { r = await Eyes().look({ image: c.toDataURL("image/jpeg", 0.85) }); } finally { c.width = c.height = 0; }
+      const labels = [...new Set((r.labels || []).filter((l) => l.confidence >= 0.6).map((l) => String(l.text).toLowerCase()))].slice(0, 8);
+      const words = String(r.text || "").trim();
+      if (!labels.length && words.replace(/\s/g, "").length < 3) {
+        thinking.remove();
+        addMsg("bot", "I couldn't make out what that is. Try again with more light, a bit closer, and hold the phone still.");
+        return false;
+      }
+      const when = new Date().toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+      const firstLine = words.split("\n").map((l) => l.trim()).find((l) => l.length > 2) || "";
+      const title = (firstLine ? firstLine.split(/\s+/).slice(0, 6).join(" ") : labels.slice(0, 3).map((l) => l[0].toUpperCase() + l.slice(1)).join(", ")).slice(0, 60) || "Something I saw";
+      const desc = `Photo taken ${when}.` + (question ? ` The user asked: ${question}.` : "") +
+        (labels.length ? ` Things I could see in it: ${labels.join(", ")}.` : "") + (words ? ` Words written in it: ${words}` : "");
+      let reply = (labels.length ? `I can see ${listWords(labels.slice(0, 5))}.` : "") +
+        (words ? ` I read ${words.length > 200 ? "the writing on it" : `"${words.replace(/\s+/g, " ")}"`}.` : "");
+      if (sample) {
+        try {
+          const t = (await sample("You just looked at a photo through the user's phone camera. Here is what you noticed:\n" + desc +
+            "\n\nIn 2 or 3 friendly sentences, tell the user what you see" + (question ? " and answer their question: " + question : "") +
+            ". Plain text, no markdown.", {})).text.trim();
+          if (t) reply = t;
+        } catch {}
+      }
+      const parts = cut(desc);
+      const src = { id: newId(), name: `${title} (${when})`, kind: "photo", createdAt: Date.now(), size: desc.length, parts: parts.length, summary: reply };
+      await store.put(src, parts);
+      changed();
+      thinking.remove();
+      addMsg("bot", reply.trim(), "Saved to my memory as \"" + title + "\". I didn't keep the photo.");
+      if (autoSpeak) speak(reply);
+      return true;
+    } catch (e) {
+      thinking.remove();
+      addMsg("bot", e?.message === "full" ? "This phone's storage for Bell is full. Forget some old things and try again." : "I couldn't look at that photo. Try taking it again.");
+      return false;
+    }
+  }
   $("cam").addEventListener("change", (e) => {
     const f = e.target.files[0]; e.target.value = "";
     if (!f) return;
@@ -757,7 +805,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       const label = files.length > 1 ? ` (${n + 1} of ${files.length})` : "";
       bar.hidden = false; fill.style.width = "5%";
       setStatus("file-status", `Reading ${file.name}${label}…`);
-      if ((file.type || "").startsWith("image/") && !Eyes()) { if (await see(file, "")) ok++; continue; }
+      if ((file.type || "").startsWith("image/")) { if (await see(file, "")) ok++; continue; }
       try {
         const info = await readFile(file, (f, msg) => { fill.style.width = Math.max(5, f * 85) + "%"; setStatus("file-status", `${msg}${label}…`); });
         if (!info.text || !info.text.trim()) throw new Error("I couldn't find any text in this file.");
@@ -911,7 +959,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   renderVoice();
 
   // ================= start =================
-  $("cam-btn").hidden = true;
+  $("cam-btn").hidden = !Eyes();
   (async () => {
     try { await loadAll(); } catch { addMsg("bot", "I couldn't open my memory on this phone. Try closing and reopening the app."); }
     changed();
