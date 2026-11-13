@@ -42,7 +42,13 @@ jobs:
           chmod +x gradlew
           if [ -n "$PW" ] && [ -n "$KEY_B64" ]; then
             # Signed with the same key every time, so each new APK installs over the old one.
-            echo "$KEY_B64" | base64 -d > "$RUNNER_TEMP/bell.keystore"
+            # Ignore spaces or line breaks that sneak in when the secret is pasted on a phone.
+            printf '%s' "$KEY_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/bell.keystore"
+            PW="$(printf '%s' "$PW" | tr -d '[:space:]')"
+            if ! keytool -list -keystore "$RUNNER_TEMP/bell.keystore" -storepass "$PW" >/dev/null 2>&1; then
+              echo "::error::The signing secrets don't match each other. Check that BELL_KEYSTORE_BASE64 was pasted in full and BELL_KEYSTORE_PASSWORD is exactly the password."
+              exit 1
+            fi
             export BELL_KEYSTORE_FILE="$RUNNER_TEMP/bell.keystore"
             export BELL_KEYSTORE_PASSWORD="$PW" BELL_KEY_PASSWORD="$PW" BELL_KEY_ALIAS=bell
             ./gradlew assembleRelease --no-daemon
