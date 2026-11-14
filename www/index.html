@@ -117,6 +117,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
       </div>
       <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
       <div id="handsfree-bar" hidden><button type="button" class="btn ghost" id="handsfree">🎧 Hands-free chat</button><span class="hint" id="handsfree-hint"></span></div>
+      <label class="toggle" id="online-wrap" hidden><input type="checkbox" id="online"> 🌐 Let Bell check the internet when you ask (off = fully private)</label>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
         <label class="btn ghost icon-btn" for="cam" id="cam-btn" title="Let Bell look through your camera" aria-label="Look with the camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></label>
@@ -953,7 +954,41 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
     return el;
   }
   let autoSpeak = false;
+  // ===== going online (only when the switch is on and the question needs it) =====
+  const Web = () => window.Capacitor?.Plugins?.BellWeb;
+  let onlineOn = false;
+  try { onlineOn = localStorage.getItem("bell.online") === "1"; } catch {}
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+  // does this question want fresh or outside information?
+  function wantsWeb(q) {
+    return /\b(search|google|look ?up|online|internet|web|browse|latest|recent|news|today|tonight|tomorrow|yesterday|this week|right now|currently|current|price|cost|how much|cheap|weather|forecast|temperature|score|who won|result|stock|shares|exchange rate|bitcoin|rate|near me|open now|opening hours|release date|when is|what time|schedule|flight|live)\b/i.test(q);
+  }
+  async function onlineAnswer(question, onText) {
+    const W = Web(); if (!W) return { text: "Bell can't reach the internet in this version. Install the latest app and try again." };
+    onText && onText("Searching the internet…");
+    let s; try { s = await W.search({ query: question }); } catch { return { text: "I couldn't reach the internet just now. Check your connection and try again." }; }
+    const results = s.results || [];
+    if (!results.length && !s.abstract) return { text: "I searched but couldn't find anything about that online. Try saying it a different way." };
+    let corpus = "";
+    if (s.abstract) corpus += `${s.abstractSource || "Summary"}: ${s.abstract}\n`;
+    for (const r of results.slice(0, 5)) corpus += `\n[${r.title}] (${host(r.url)})\n${r.snippet || ""}`;
+    // read the top couple of pages for detail
+    onText && onText("Reading the results…");
+    for (const r of results.slice(0, 2)) { try { const t = await W.fetchText({ url: r.url }); if (t.text) corpus += `\n\nFrom ${host(r.url)}:\n${t.text.slice(0, 2500)}`; } catch {} }
+    const cites = [s.abstractSource, ...results.slice(0, 3).map((r) => host(r.url))].filter(Boolean);
+    const srcLine = "From the web: " + [...new Set(cites)].join(", ");
+    if (sample && $("smart").checked) {
+      const prompt = "Answer the user's question using these live web results collected just now. Base your answer only on them, name the websites you used, and if they don't really answer it, say so honestly. Keep it clear and short, plain text.\n\nWEB RESULTS:\n" + corpus.slice(0, 8000) + "\n\nQUESTION: " + question;
+      try { const r = await sample(prompt, { onText }); return { text: r.text.trim(), src: srcLine }; } catch {}
+    }
+    // no brain: give the summary and the top snippets
+    const lines = [];
+    if (s.abstract) lines.push(s.abstract);
+    for (const r of results.slice(0, 4)) if (r.snippet) lines.push(`• ${r.title}: ${r.snippet}`);
+    return { text: lines.join("\n") || "Here's what I found. Tap a result to read more.", src: srcLine };
+  }
   async function answerOf(question, hist, onText) {
+    if (onlineOn && Web() && wantsWeb(question)) { try { return await onlineAnswer(question, onText); } catch {} }
     try { return sample && $("smart").checked ? await smartAnswer(question, hist, onText) : plainAnswer(question); }
     catch { return plainAnswer(question); }
   }
@@ -1261,6 +1296,16 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   loadVoices();
   renderVoice();
   wireStudio();
+  // the internet switch, off by default
+  if (Web()) {
+    const box = $("online"), wrap = $("online-wrap");
+    wrap.hidden = false; box.checked = onlineOn;
+    box.addEventListener("change", () => {
+      onlineOn = box.checked;
+      try { localStorage.setItem("bell.online", onlineOn ? "1" : "0"); } catch {}
+      addMsg("bot", onlineOn ? "Internet is on. When you ask me to look something up, I'll search the web and tell you where I found it. Turn it off any time to stay fully private." : "Internet is off. I'll only use what's on your phone.");
+    });
+  }
 
   // ================= start =================
   $("cam-btn").hidden = !Eyes();
