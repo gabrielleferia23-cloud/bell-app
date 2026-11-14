@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nova — Voice Assistant</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0b1020;color:#e9efff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}.app{width:min(700px,100%);background:#151d31;border:1px solid #303d5b;border-radius:24px;padding:30px;box-shadow:0 24px 70px #0005}h1{margin:0;font-size:32px}.sub{color:#aab9d6}.orb{height:140px;width:140px;border-radius:50%;margin:32px auto;background:radial-gradient(circle at 35% 30%,#b5e8ff,#5275ec 50%,#3c266f);box-shadow:0 0 65px #657dff77;transition:transform .2s}.orb.active{animation:pulse 1.8s infinite alternate}@keyframes pulse{to{transform:scale(1.09);box-shadow:0 0 90px #74a7ffbb}}.status{text-align:center;min-height:25px;color:#c6d4f5}.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}button{border:0;border-radius:12px;padding:13px 19px;font-size:15px;font-weight:650;cursor:pointer;background:#7797ff;color:#0b1020}button.secondary{background:#2b3855;color:#fff}button:disabled{opacity:.4;cursor:not-allowed}.history{margin-top:24px;border-top:1px solid #34405c;padding-top:18px;max-height:280px;overflow:auto}.entry{padding:9px 0;line-height:1.5;overflow-wrap:anywhere}.role{color:#9eb6ff;font-size:12px;font-weight:700;text-transform:uppercase}.small{font-size:12px;color:#9eabc7;margin-top:20px}
+</style>
+</head>
+<body>
+<main class="app">
+<h1>Nova <span aria-hidden="true">✦</span></h1><p class="sub">Your real-time AI voice companion</p>
+<div id="orb" class="orb" aria-hidden="true"></div><p class="status" id="status" role="status">Ready to talk</p>
+<div class="actions"><button id="start">Start talking</button><button id="mute" class="secondary" disabled>Mute mic</button><button id="stop" class="secondary" disabled>End call</button></div>
+<section class="history" aria-label="Conversation transcript"><strong>Conversation</strong><div id="messages"></div></section>
+<p class="small">Microphone permission required. Audio is streamed to the AI provider while connected. Transcripts appear here temporarily and are not saved by this application.</p>
+<audio id="speaker" autoplay playsinline></audio>
+</main>
+<script type="module">
+const $ = id => document.getElementById(id);
+let pc, mic, dc, muted = false;
+let pendingUser = '', pendingAssistant = '';
+const setStatus = value => $('status').textContent = value;
+function addMessage(role, content) {
+  if (!content?.trim()) return;
+  const item = document.createElement('div'); item.className = 'entry';
+  const label = document.createElement('div'); label.className = 'role'; label.textContent = role;
+  const body = document.createElement('div'); body.textContent = content;
+  item.append(label, body); $('messages').append(item);
+  item.scrollIntoView({ block: 'nearest' });
+}
+function reset() {
+  mic?.getTracks().forEach(track => track.stop());
+  dc?.close(); pc?.close();
+  $('speaker').srcObject = null;
+  pc = mic = dc = null; muted = false;
+  $('start').disabled = false; $('stop').disabled = true; $('mute').disabled = true;
+  $('mute').textContent = 'Mute mic'; $('orb').classList.remove('active');
+}
+function onEvent(e) {
+  let m; try { m = JSON.parse(e.data); } catch { return; }
+  if (m.type === 'input_audio_buffer.speech_started') setStatus('Listening…');
+  if (m.type === 'response.created') setStatus('Thinking…');
+  if (m.type === 'response.audio.delta' || m.type === 'response.output_audio.delta') setStatus('Speaking…');
+  if (m.type === 'conversation.item.input_audio_transcription.completed') {
+    addMessage('You', m.transcript);
+  }
+  if (m.type === 'response.audio_transcript.delta' || m.type === 'response.output_audio_transcript.delta') pendingAssistant += m.delta || '';
+  if (m.type === 'response.audio_transcript.done' || m.type === 'response.output_audio_transcript.done') {
+    addMessage('Nova', m.transcript || pendingAssistant); pendingAssistant = '';
+  }
+  if (m.type === 'response.done') setStatus('Listening…');
+  if (m.type === 'error') { console.error('Realtime error', m); setStatus('Voice error — check console'); }
+}
+$('start').onclick = async () => {
+  $('start').disabled = true; setStatus('Connecting…');
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const r = await fetch('/api/session', { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'Session creation failed');
+    const { token } = await r.json();
+    pc = new RTCPeerConnection();
+    pc.ontrack = ev => { $('speaker').srcObject = ev.streams[0]; $('speaker').play().catch(console.warn); };
+    pc.onconnectionstatechange = () => { if (pc && ['failed','disconnected','closed'].includes(pc.connectionState)) { reset(); setStatus('Disconnected'); } };
+    mic.getTracks().forEach(track => pc.addTrack(track, mic));
+    dc = pc.createDataChannel('oai-events'); dc.onmessage = onEvent;
+    dc.onopen = () => {
+      dc.send(JSON.stringify({ type:'session.update', session: { audio: { input: { transcription: { model: 'gpt-4o-mini-transcribe' }, turn_detection: { type:'server_vad' } } } } }));
+      setStatus('Listening…');
+    };
+    const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+    const answer = await fetch('https://api.openai.com/v1/realtime/calls', { method:'POST', headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/sdp' }, body:offer.sdp });
+    if (!answer.ok) throw new Error('WebRTC negotiation failed: ' + answer.status);
+    await pc.setRemoteDescription({ type:'answer', sdp:await answer.text() });
+    $('stop').disabled = false; $('mute').disabled = false; $('orb').classList.add('active');
+  } catch (err) { console.error(err); reset(); setStatus(err.message || 'Could not connect'); }
+};
+$('stop').onclick = () => { reset(); setStatus('Call ended'); };
+$('mute').onclick = () => { muted = !muted; mic?.getAudioTracks().forEach(t => t.enabled = !muted); $('mute').textContent = muted ? 'Unmute mic' : 'Mute mic'; setStatus(muted ? 'Microphone muted' : 'Listening…'); };
+window.addEventListener('pagehide', reset);
+</script>
+</body></html>

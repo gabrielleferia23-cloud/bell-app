@@ -1,0 +1,17 @@
+# One-click-style deploy to Render (https://render.com).
+# In Render: New + > Blueprint, point it at this repo, then paste your
+# OpenAI API key when it asks for OPENAI_API_KEY.
+services:
+  - type: web
+    name: nova-voice
+    runtime: node
+    plan: free
+    rootDir: nova
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REALTIME_MODEL
+        value: gpt-realtime
