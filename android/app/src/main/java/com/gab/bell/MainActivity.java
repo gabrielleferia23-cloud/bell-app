@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(BellBrainPlugin.class);
         registerPlugin(BellEyesPlugin.class);
+        registerPlugin(BellWebPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
