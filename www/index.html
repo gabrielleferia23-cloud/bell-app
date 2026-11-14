@@ -92,7 +92,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 
 <div class="app">
   <header>
-    <div class="brand"><div class="avatar" aria-hidden="true">B</div><h1>Bell</h1></div>
+    <div class="brand"><div class="avatar" id="bell-logo" aria-hidden="true"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="galaxy" cx="38%" cy="32%" r="75%"><stop offset="0%" stop-color="#4b3fb0"/><stop offset="45%" stop-color="#2a2060"/><stop offset="100%" stop-color="#0a0a1e"/></radialGradient><linearGradient id="bellfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf2ff"/><stop offset="55%" stop-color="#bcd2ff"/><stop offset="100%" stop-color="#8f8cff"/></linearGradient><radialGradient id="corona" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="rgba(143,140,255,.55)"/><stop offset="100%" stop-color="rgba(143,140,255,0)"/></radialGradient></defs><circle cx="24" cy="24" r="24" fill="url(#galaxy)"/><g class="spin"><circle class="star" cx="9" cy="10" r="0.5"/><circle class="star" cx="14" cy="7" r="0.85"/><circle class="star" cx="20" cy="6" r="1.2"/><circle class="star" cx="30" cy="8" r="0.5"/><circle class="star" cx="37" cy="11" r="0.85"/><circle class="star" cx="40" cy="18" r="1.2"/><circle class="star" cx="8" cy="20" r="0.5"/><circle class="star" cx="39" cy="27" r="0.85"/><circle class="star" cx="11" cy="33" r="1.2"/><circle class="star" cx="34" cy="35" r="0.5"/><circle class="star" cx="18" cy="40" r="0.85"/><circle class="star" cx="27" cy="41" r="1.2"/><circle class="star" cx="24" cy="15" r="0.5"/><circle class="star" cx="16" cy="24" r="0.85"/><circle class="star" cx="32" cy="22" r="1.2"/><circle class="star" cx="24" cy="30" r="0.5"/></g><g class="net"><line class="nline" x1="8" y1="12" x2="24" y2="22"/><line class="nline" x1="40" y1="14" x2="24" y2="22"/><line class="nline" x1="10" y1="37" x2="24" y2="22"/><line class="nline" x1="39" y1="34" x2="24" y2="22"/><line class="nline" x1="24" y1="5" x2="24" y2="22"/><circle class="ndot" cx="8" cy="12" r="1.6"/><circle class="ndot" cx="40" cy="14" r="1.6"/><circle class="ndot" cx="10" cy="37" r="1.6"/><circle class="ndot" cx="39" cy="34" r="1.6"/><circle class="ndot" cx="24" cy="5" r="1.6"/></g><circle class="corona" cx="24" cy="23" r="16" fill="url(#corona)"/><g class="bell" fill="url(#bellfill)"><circle cx="24" cy="11" r="2.2"/><path d="M14 32 C14 22 18 15 24 15 C30 15 34 22 34 32 Z"/><rect x="12.5" y="31.5" width="23" height="3" rx="1.5"/><circle cx="24" cy="37" r="1.8"/></g></svg></div><h1>Bell</h1></div>
     <span class="count" id="count">Nothing learned yet</span>
   </header>
   <nav role="tablist">
@@ -116,7 +116,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
         <div class="actions"><button class="btn" id="brain-up-btn">Get the smarter brain</button></div>
       </div>
       <label class="toggle" id="smart-wrap" hidden><input type="checkbox" id="smart" checked> Bell thinks with her AI brain (turn off for quick, exact lookups)</label>
-      <div id="handsfree-bar" hidden><button type="button" class="btn ghost" id="handsfree">🎧 Hands-free chat</button><span class="hint" id="handsfree-hint"></span></div>
+      <div id="handsfree-bar" hidden><button type="button" class="btn ghost icon-btn" id="handsfree" aria-label="Talk out loud" title="Talk out loud">🎧</button><span class="hint" id="handsfree-hint"></span></div>
       <label class="toggle" id="online-wrap" hidden><input type="checkbox" id="online"> 🌐 Let Bell check the internet when you ask (off = fully private)</label>
       <form class="row" id="ask-form">
         <textarea id="ask" rows="1" placeholder="Ask Bell…"></textarea>
@@ -842,7 +842,7 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   function setHF(state) {
     const b = $("handsfree"); if (!b) return;
     b.setAttribute("aria-pressed", String(convo.on));
-    b.textContent = !convo.on ? "🎧 Hands-free chat" : state === "speaking" ? "● Bell is talking — tap to stop" : state === "thinking" ? "● Thinking — tap to stop" : "● Listening — tap to stop";
+    b.textContent = !convo.on ? "🎧" : state === "speaking" ? "● Bell is talking — tap to stop" : state === "thinking" ? "● Thinking — tap to stop" : "● Listening — tap to stop";
     b.classList.toggle("live", convo.on);
   }
   async function startConversation() {
@@ -1300,8 +1300,10 @@ details.install ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   if (Web()) {
     const box = $("online"), wrap = $("online-wrap");
     wrap.hidden = false; box.checked = onlineOn;
+    $("bell-logo")?.classList.toggle("online", onlineOn);
     box.addEventListener("change", () => {
       onlineOn = box.checked;
+      $("bell-logo")?.classList.toggle("online", onlineOn);
       try { localStorage.setItem("bell.online", onlineOn ? "1" : "0"); } catch {}
       addMsg("bot", onlineOn ? "Internet is on. When you ask me to look something up, I'll search the web and tell you where I found it. Turn it off any time to stay fully private." : "Internet is off. I'll only use what's on your phone.");
     });
